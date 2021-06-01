@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS users (
   password VARCHAR ( 255 ) NOT NULL,
   created_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   last_login TIMESTAMP
+  /* TODO payment methods */
 );
+
 
 /*
 Here, during registration, we email the address a link with a unique token,
@@ -48,6 +50,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   FOREIGN KEY (user_id) REFERENCES users (user_id)
 );
 
+CREATE TYPE subscription_type AS ENUM ('free', 'premium', 'gold', 'platinum');
+
 /*
 A chef is a Local Cooking user that we vet to have the power to create their own menus.
 */
@@ -57,6 +61,10 @@ CREATE TABLE IF NOT EXISTS chefs (
   public_name VARCHAR ( 255 ) NOT NULL,
   profile VARCHAR ( 1024 ),
   enrolled_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  subscription subscription_type NOT NULL,
+  subscription_expiration TIMESTAMP NOT NULL,
+  /* FIXME delivery method */
+  /* TODO Payment method (same as user?) */
   FOREIGN KEY (user_id) REFERENCES users (user_id)
 );
 
@@ -70,7 +78,7 @@ certifications of their own, which they use to vet other chefs and grow their ac
 CREATE TABLE IF NOT EXISTS credentials (
   credential_id serial PRIMARY KEY,
   title VARCHAR ( 255 ) NOT NULL,
-  description VARCHAR ( 1024 ) NOT NULL,
+  description VARCHAR ( 1024 ) NOT NULL
 );
 
 /*
@@ -87,12 +95,66 @@ CREATE UNIQUE INDEX idx_chef_credentials
 
 CREATE TABLE IF NOT EXISTS menus (
   menu_id serial PRIMARY KEY,
+  chef_id INT NOT NULL,
+  title VARCHAR ( 255 ) NOT NULL,
+  description VARCHAR ( 1024 ) NOT NULL,
+  /* TODO themes */
+  /* TODO images */
+  FOREIGN KEY (chef_id) REFERENCES chefs (chef_id)
 );
+/* TODO constraints - one menu for free, three for premium, 10 for gold, inf for platinum */
 
-CREATE TABLE IF NOT EXISTS item (
+CREATE TABLE IF NOT EXISTS menu_items (
   item_id serial PRIMARY KEY,
   menu_id INT NOT NULL,
   title VARCHAR ( 255 ) NOT NULL,
-  description VARCHAR ( ),
+  description VARCHAR ( 1024 ) NOT NULL,
+  price INT NOT NULL, /* stored as cents */
+  appx_order_delay INTERVAL DAY TO HOUR NOT NULL,
+  /* TODO images */
+  /* FIXME categories like vegan etc. */
   FOREIGN KEY (menu_id) REFERENCES menus (menu_id)
+);
+/* TODO constraints - 5 for free, 15 for premium, 30 for gold, inf for platinum */
+
+
+/* The cart for people to file orders */
+CREATE TABLE IF NOT EXISTS carts (
+  user_id INT NOT NULL,
+  item_id INT NOT NULL,
+  quantity INT NOT NULL DEFAULT 1,
+  added_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users (user_id),
+  FOREIGN KEY (item_id) REFERENCES menu_items (item_id)
+);
+CREATE UNIQUE INDEX idx_carts
+  ON carts (user_id, item_id); /* increment quantity instead - FIXME can I just update on insert / delete? */
+
+
+/* Record of all orders */
+CREATE TABLE IF NOT EXISTS orders (
+  order_id serial PRIMARY KEY,
+  user_id INT NOT NULL,
+  ordered_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_on TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users (user_id)
+);
+
+CREATE TABLE IF NOT EXISTS order_contents (
+  order_content_id serial PRIMARY KEY,
+  order_id INT NOT NULL,
+  item_id INT NOT NULL,
+  quantity INT NOT NULL,
+  FOREIGN KEY (order_id) REFERENCES orders (order_id),
+  FOREIGN KEY (item_id) REFERENCES menu_items (item_id)
+);
+
+CREATE TABLE IF NOT EXISTS reviews (
+  review_id serial PRIMARY KEY,
+  order_content_id INT NOT NULL,
+  reviewed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  title VARCHAR ( 255 ) NOT NULL,
+  description VARCHAR ( 1024 ),
+  stars FLOAT NOT NULL DEFAULT '2.5',
+  FOREIGN KEY (order_content_id) REFERENCES order_contents (order_content_id)
 );
