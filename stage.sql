@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR ( 255 ) UNIQUE NOT NULL,
   password VARCHAR ( 255 ) NOT NULL,
   created_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  last_login TIMESTAMP
+  last_login TIMESTAMP,
+  CONSTRAINT chk_login_created CHECK (created_on <= last_login) /* sanity-check */
   /* TODO payment methods */
 );
 
@@ -27,7 +28,7 @@ link, we'll also include everything they put in the registration form as url par
   (0 rows)
 */
 CREATE TABLE IF NOT EXISTS pending_registrations (
-  email VARCHAR ( 255 ) NOT NULL,
+  email VARCHAR ( 255 ) UNIQUE NOT NULL,
   auth_token VARCHAR ( 255 ) PRIMARY KEY,
   FOREIGN KEY (email) REFERENCES users (email)
 );
@@ -44,7 +45,7 @@ database will prune old data during off hours.
   (0 rows)
 */
 CREATE TABLE IF NOT EXISTS sessions (
-  user_id INT NOT NULL,
+  user_id INT NOT NULL, /* not unique - multiple logged-in users */
   session_token VARCHAR ( 255 ) PRIMARY KEY,
   expiration TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP + INTERVAL '1 day',
   FOREIGN KEY (user_id) REFERENCES users (user_id)
@@ -56,7 +57,7 @@ CREATE TYPE subscription_type AS ENUM ('free', 'premium', 'gold', 'platinum');
 A chef is a Local Cooking user that we vet to have the power to create their own menus.
 */
 CREATE TABLE IF NOT EXISTS chefs (
-  user_id INT NOT NULL,
+  user_id INT UNIQUE NOT NULL,
   chef_id serial PRIMARY KEY,
   public_name VARCHAR ( 255 ) NOT NULL,
   profile VARCHAR ( 1024 ),
@@ -88,10 +89,9 @@ CREATE TABLE IF NOT EXISTS chef_credentials (
   chef_id INT NOT NULL,
   credential_id INT NOT NULL,
   FOREIGN KEY (chef_id) REFERENCES chefs (chef_id),
-  FOREIGN KEY (credential_id) REFERENCES credentials (credential_id)
+  FOREIGN KEY (credential_id) REFERENCES credentials (credential_id),
+  UNIQUE (chef_id, credential_id) /*A chef can't have two of the same credential*/
 );
-CREATE UNIQUE INDEX idx_chef_credentials
-  ON chef_credentials (chef_id, credential_id); /*A chef can't have two of the same credential*/
 
 CREATE TABLE IF NOT EXISTS menus (
   menu_id serial PRIMARY KEY,
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
   menu_id INT NOT NULL,
   title VARCHAR ( 255 ) NOT NULL,
   description VARCHAR ( 1024 ) NOT NULL,
-  price INT NOT NULL, /* stored as cents */
+  price INT NOT NULL CHECK (price > 0), /* stored as cents */
   appx_order_delay INTERVAL DAY TO HOUR NOT NULL,
   /* TODO images */
   /* FIXME categories like vegan etc. */
@@ -122,21 +122,18 @@ CREATE TABLE IF NOT EXISTS menu_items (
 CREATE TABLE IF NOT EXISTS carts (
   user_id INT NOT NULL,
   item_id INT NOT NULL,
-  quantity INT NOT NULL DEFAULT 1,
+  quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
   added_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users (user_id),
-  FOREIGN KEY (item_id) REFERENCES menu_items (item_id)
+  FOREIGN KEY (item_id) REFERENCES menu_items (item_id),
+  UNIQUE (user_id, item_id) /* increment quantity instead - FIXME can I just update on insert / delete? */
 );
-CREATE UNIQUE INDEX idx_carts
-  ON carts (user_id, item_id); /* increment quantity instead - FIXME can I just update on insert / delete? */
-
 
 /* Record of all orders */
 CREATE TABLE IF NOT EXISTS orders (
   order_id serial PRIMARY KEY,
   user_id INT NOT NULL,
   ordered_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  completed_on TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users (user_id)
 );
 
@@ -144,17 +141,22 @@ CREATE TABLE IF NOT EXISTS order_contents (
   order_content_id serial PRIMARY KEY,
   order_id INT NOT NULL,
   item_id INT NOT NULL,
-  quantity INT NOT NULL,
+  quantity INT NOT NULL CHECK (quantity > 0),
+  completed_on TIMESTAMP,
+  delivered_on TIMESTAMP,
   FOREIGN KEY (order_id) REFERENCES orders (order_id),
-  FOREIGN KEY (item_id) REFERENCES menu_items (item_id)
+  FOREIGN KEY (item_id) REFERENCES menu_items (item_id),
+  CONSTRAINT chk_completed_delivered CHECK (NOT (delivered_on IS NOT NULL AND completed_on IS NULL)) /* makes sure it's not delivered before it's complete */
 );
 
+/* Reviews for a specific order */
 CREATE TABLE IF NOT EXISTS reviews (
   review_id serial PRIMARY KEY,
-  order_content_id INT NOT NULL,
+  order_content_id INT UNIQUE NOT NULL, /* Only one review per order content */
   reviewed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   title VARCHAR ( 255 ) NOT NULL,
   description VARCHAR ( 1024 ),
-  stars FLOAT NOT NULL DEFAULT '2.5',
+  /* TODO images */
+  stars decimal(2,1) CHECK (stars >= 1 AND stars <= 5), /* For aggregates */
   FOREIGN KEY (order_content_id) REFERENCES order_contents (order_content_id)
 );
