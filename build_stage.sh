@@ -1,6 +1,5 @@
 #! /bin/bash
 
-sudo -i -u postgres dropdb localcooking_tmp
 sudo -i -u postgres createdb localcooking_tmp
 
 mkdir -p tmp/
@@ -41,3 +40,5 @@ ltext "stage.template.sql tmp/users tmp/pendingRegistrations tmp/sessions tmp/ch
       > stage.sql
 
 rm -r tmp/
+
+sudo -i -u postgres dropdb localcooking_tmp
