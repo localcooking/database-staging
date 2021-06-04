@@ -1,11 +1,41 @@
 #! /bin/bash
 
-sudo -i -u postgres psql -c "DROP DATABASE localcooking_tmp; CREATE DATABASE localcooking_tmp;"
+sudo -i -u postgres dropdb localcooking_tmp
+sudo -i -u postgres createdb localcooking_tmp
 
 mkdir -p tmp/
 
-sudo -i -u postgres psql -d localcooking_tmp -f /home/athan/dev/localcooking/database/staging/stage.template.sql
+export WD=`pwd`
+
+sudo -i -u postgres psql -d localcooking_tmp -f $WD/stage.template.sql
 sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ users" > tmp/users
 sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ pending_registrations" > tmp/pendingRegistrations
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ sessions" > tmp/sessions
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ chefs" > tmp/chefs
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ credentials" > tmp/credentials
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ chef_credentials" > tmp/chefCredentials
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ menus" > tmp/menus
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ menu_items" > tmp/menuItems
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ menu_item_mapping" > tmp/menuItemMapping
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ carts" > tmp/carts
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ orders" > tmp/orders
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ order_contents" > tmp/orderContents
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ reviews" > tmp/reviews
 
-ltext "stage.template.sql tmp/users tmp/pendingRegistrations" -r "tmp/users" -r "tmp/pendingRegistrations" > stage.sql
+ltext "stage.template.sql tmp/users tmp/pendingRegistrations tmp/sessions tmp/chefs tmp/credentials tmp/chefCredentials tmp/menus tmp/menuItems tmp/menuItemMapping tmp/carts tmp/orders tmp/orderContents tmp/reviews" \
+      -r "tmp/users" \
+      -r "tmp/pendingRegistrations" \
+      -r "tmp/sessions" \
+      -r "tmp/chefs" \
+      -r "tmp/credentials" \
+      -r "tmp/chefCredentials" \
+      -r "tmp/menus" \
+      -r "tmp/menuItems" \
+      -r "tmp/menuItemMapping" \
+      -r "tmp/carts" \
+      -r "tmp/orders" \
+      -r "tmp/orderContents" \
+      -r "tmp/reviews" \
+      > stage.sql
+
+rm -r tmp/
