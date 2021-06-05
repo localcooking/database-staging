@@ -63,6 +63,12 @@ CREATE VIEW active_pending_registrations AS
 
 comment on view active_pending_registrations is 'Any pending registrations that are not expired';
 
+CREATE FUNCTION select_pending_registration(BYTEA) RETURNS VARCHAR
+AS 'DELETE FROM pending_registrations WHERE auth_token = $1 AND expiration >= CURRENT_TIMESTAMP RETURNING email;'
+  LANGUAGE SQL
+  VOLATILE
+  RETURNS NULL ON NULL INPUT;
+
 
 /*
 Every time a user successfully logs in, we'll issue them a session token that gets kept in a
