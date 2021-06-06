@@ -37,22 +37,17 @@ link, we'll also include everything they put in the registration form as url par
 */
 CREATE TABLE IF NOT EXISTS pending_registrations (
   email VARCHAR ( 255 ) UNIQUE NOT NULL, -- Doesn't reference users because it doesn't exist yet.
-  auth_token BYTEA PRIMARY KEY CHECK (octet_length(auth_token) = 64)
-    DEFAULT digest(gen_random_bytes(64), 'sha512'),
+  auth_token uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   expiration TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP + INTERVAL '1 day'
 );
 
 comment on table pending_registrations is 'Any pending registrations that need to click the email link';
 
 -- TODO call from a cron job
-CREATE FUNCTION expire_pending_registrations() RETURNS trigger
-  LANGUAGE plpgsql
-AS $$
-BEGIN
-  DELETE FROM pending_registrations WHERE expiration < NOW();
-  RETURN NEW;
-END;
-$$;
+CREATE FUNCTION expire_pending_registrations() RETURNS void
+AS 'DELETE FROM pending_registrations WHERE expiration < CURRENT_TIMESTAMP;'
+  LANGUAGE SQL
+  VOLATILE;
 
 /*
 Table of only active pending registrations as a view, to make things easier and less reliant on cron-jobs
@@ -66,7 +61,7 @@ CREATE VIEW active_pending_registrations AS
 
 comment on view active_pending_registrations is 'Any pending registrations that are not expired';
 
-CREATE FUNCTION select_pending_registration(BYTEA) RETURNS VARCHAR
+CREATE FUNCTION select_pending_registration(uuid) RETURNS VARCHAR
 AS 'DELETE FROM pending_registrations WHERE auth_token = $1 AND expiration >= CURRENT_TIMESTAMP RETURNING email;'
   LANGUAGE SQL
   VOLATILE
@@ -84,8 +79,7 @@ database will prune old data during off hours.
 */
 CREATE TABLE IF NOT EXISTS sessions (
   user_id INT NOT NULL REFERENCES users (user_id) ON DELETE RESTRICT, -- not unique - multiple logged-in users
-  session_token BYTEA NOT NULL PRIMARY KEY CHECK (octet_length(session_token) = 64)
-    DEFAULT digest(gen_random_bytes(64), 'sha512'),
+  session_token uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   expiration TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP + INTERVAL '1 day'
   -- TODO when a user is pseudo-deleted via `inactive`, delete all session rows for that user, logging them out
 );
@@ -93,14 +87,10 @@ CREATE TABLE IF NOT EXISTS sessions (
 comment on table sessions is 'Any active logged-in users, with their session token and expiration';
 
 -- TODO call from a cron job
-CREATE FUNCTION expire_sessions() RETURNS trigger
-  LANGUAGE plpgsql
-AS $$
-BEGIN
-  DELETE FROM sessions WHERE expiration < NOW();
-  RETURN NEW;
-END;
-$$;
+CREATE FUNCTION expire_sessions() RETURNS void
+AS 'DELETE FROM sessions WHERE expiration < CURRENT_TIMESTAMP;'
+  LANGUAGE SQL
+  VOLATILE;
 
 -- TODO make a selection function that also updates its expiration when a row is found
 
@@ -121,14 +111,14 @@ AS 'SELECT salt FROM users WHERE email = $1;'
   STABLE
   RETURNS NULL ON NULL INPUT;
 
-CREATE FUNCTION login(VARCHAR, BYTEA) RETURNS BYTEA
+CREATE FUNCTION login(VARCHAR, BYTEA) RETURNS uuid
 AS 'INSERT INTO sessions (user_id) SELECT user_id FROM users WHERE email = $1 AND password = $2 RETURNING session_token;'
   LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
-CREATE FUNCTION lookup_and_update_session(BYTEA) RETURNS BYTEA
-AS 'UPDATE sessions SET session_token = digest(gen_random_bytes(64), ''sha512'') WHERE session_token = $1 RETURNING session_token;'
+CREATE FUNCTION lookup_and_update_session(uuid) RETURNS uuid
+AS 'UPDATE sessions SET session_token = gen_random_uuid() WHERE session_token = $1 RETURNING session_token;'
   LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;

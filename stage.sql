@@ -54,39 +54,32 @@ to verify the email is authentic. Furthermore, in the email with a "click here t
 link, we'll also include everything they put in the registration form as url parameters
 (pkdf2 encrypting the password first).
 
-                                                          Table "public.pending_registrations"
-   Column   |            Type             | Collation | Nullable |                   Default                    | Storage  | Stats target | Description 
-------------+-----------------------------+-----------+----------+----------------------------------------------+----------+--------------+-------------
- email      | character varying(255)      |           | not null |                                              | extended |              | 
- auth_token | bytea                       |           | not null | digest(gen_random_bytes(64), 'sha512'::text) | extended |              | 
- expiration | timestamp without time zone |           | not null | (CURRENT_TIMESTAMP + '1 day'::interval)      | plain    |              | 
+                                                       Table "public.pending_registrations"
+   Column   |            Type             | Collation | Nullable |                 Default                 | Storage  | Stats target | Description 
+------------+-----------------------------+-----------+----------+-----------------------------------------+----------+--------------+-------------
+ email      | character varying(255)      |           | not null |                                         | extended |              | 
+ auth_token | uuid                        |           | not null | gen_random_uuid()                       | plain    |              | 
+ expiration | timestamp without time zone |           | not null | (CURRENT_TIMESTAMP + '1 day'::interval) | plain    |              | 
 Indexes:
     "pending_registrations_pkey" PRIMARY KEY, btree (auth_token)
     "pending_registrations_email_key" UNIQUE CONSTRAINT, btree (email)
-Check constraints:
-    "pending_registrations_auth_token_check" CHECK (octet_length(auth_token) = 64)
 Access method: heap
 
 
 */
 CREATE TABLE IF NOT EXISTS pending_registrations (
   email VARCHAR ( 255 ) UNIQUE NOT NULL, -- Doesn't reference users because it doesn't exist yet.
-  auth_token BYTEA PRIMARY KEY CHECK (octet_length(auth_token) = 64)
-    DEFAULT digest(gen_random_bytes(64), 'sha512'),
+  auth_token uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   expiration TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP + INTERVAL '1 day'
 );
 
 comment on table pending_registrations is 'Any pending registrations that need to click the email link';
 
 -- TODO call from a cron job
-CREATE FUNCTION expire_pending_registrations() RETURNS trigger
-  LANGUAGE plpgsql
-AS $$
-BEGIN
-  DELETE FROM pending_registrations WHERE expiration < NOW();
-  RETURN NEW;
-END;
-$$;
+CREATE FUNCTION expire_pending_registrations() RETURNS void
+AS 'DELETE FROM pending_registrations WHERE expiration < CURRENT_TIMESTAMP;'
+  LANGUAGE SQL
+  VOLATILE;
 
 /*
 Table of only active pending registrations as a view, to make things easier and less reliant on cron-jobs
@@ -96,7 +89,7 @@ to ensure pending registrations are legitimate.
    Column   |            Type             | Collation | Nullable | Default | Storage  | Description 
 ------------+-----------------------------+-----------+----------+---------+----------+-------------
  email      | character varying(255)      |           |          |         | extended | 
- auth_token | bytea                       |           |          |         | extended | 
+ auth_token | uuid                        |           |          |         | plain    | 
  expiration | timestamp without time zone |           |          |         | plain    | 
 View definition:
  SELECT pending_registrations.email,
@@ -112,7 +105,7 @@ CREATE VIEW active_pending_registrations AS
 
 comment on view active_pending_registrations is 'Any pending registrations that are not expired';
 
-CREATE FUNCTION select_pending_registration(BYTEA) RETURNS VARCHAR
+CREATE FUNCTION select_pending_registration(uuid) RETURNS VARCHAR
 AS 'DELETE FROM pending_registrations WHERE auth_token = $1 AND expiration >= CURRENT_TIMESTAMP RETURNING email;'
   LANGUAGE SQL
   VOLATILE
@@ -125,16 +118,14 @@ cookie, and verified every time they check out a page on the website. Every time
 is valid in a good session, the expiration resets to now + 1 day. Then as a cron job, the
 database will prune old data during off hours.
 
-                                                                  Table "public.sessions"
-    Column     |            Type             | Collation | Nullable |                   Default                    | Storage  | Stats target | Description 
----------------+-----------------------------+-----------+----------+----------------------------------------------+----------+--------------+-------------
- user_id       | integer                     |           | not null |                                              | plain    |              | 
- session_token | bytea                       |           | not null | digest(gen_random_bytes(64), 'sha512'::text) | extended |              | 
- expiration    | timestamp without time zone |           | not null | (CURRENT_TIMESTAMP + '1 day'::interval)      | plain    |              | 
+                                                               Table "public.sessions"
+    Column     |            Type             | Collation | Nullable |                 Default                 | Storage | Stats target | Description 
+---------------+-----------------------------+-----------+----------+-----------------------------------------+---------+--------------+-------------
+ user_id       | integer                     |           | not null |                                         | plain   |              | 
+ session_token | uuid                        |           | not null | gen_random_uuid()                       | plain   |              | 
+ expiration    | timestamp without time zone |           | not null | (CURRENT_TIMESTAMP + '1 day'::interval) | plain   |              | 
 Indexes:
     "sessions_pkey" PRIMARY KEY, btree (session_token)
-Check constraints:
-    "sessions_session_token_check" CHECK (octet_length(session_token) = 64)
 Foreign-key constraints:
     "sessions_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE RESTRICT
 Access method: heap
@@ -143,8 +134,7 @@ Access method: heap
 */
 CREATE TABLE IF NOT EXISTS sessions (
   user_id INT NOT NULL REFERENCES users (user_id) ON DELETE RESTRICT, -- not unique - multiple logged-in users
-  session_token BYTEA NOT NULL PRIMARY KEY CHECK (octet_length(session_token) = 64)
-    DEFAULT digest(gen_random_bytes(64), 'sha512'),
+  session_token uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   expiration TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP + INTERVAL '1 day'
   -- TODO when a user is pseudo-deleted via `inactive`, delete all session rows for that user, logging them out
 );
@@ -152,14 +142,10 @@ CREATE TABLE IF NOT EXISTS sessions (
 comment on table sessions is 'Any active logged-in users, with their session token and expiration';
 
 -- TODO call from a cron job
-CREATE FUNCTION expire_sessions() RETURNS trigger
-  LANGUAGE plpgsql
-AS $$
-BEGIN
-  DELETE FROM sessions WHERE expiration < NOW();
-  RETURN NEW;
-END;
-$$;
+CREATE FUNCTION expire_sessions() RETURNS void
+AS 'DELETE FROM sessions WHERE expiration < CURRENT_TIMESTAMP;'
+  LANGUAGE SQL
+  VOLATILE;
 
 -- TODO make a selection function that also updates its expiration when a row is found
 
@@ -168,12 +154,12 @@ $$;
 Table of only active sessions as a view, to make things easier and less reliant on cron-jobs to ensure
 sessions are legitimate.
 
-                                     View "public.active_sessions"
-    Column     |            Type             | Collation | Nullable | Default | Storage  | Description 
----------------+-----------------------------+-----------+----------+---------+----------+-------------
- user_id       | integer                     |           |          |         | plain    | 
- session_token | bytea                       |           |          |         | extended | 
- expiration    | timestamp without time zone |           |          |         | plain    | 
+                                    View "public.active_sessions"
+    Column     |            Type             | Collation | Nullable | Default | Storage | Description 
+---------------+-----------------------------+-----------+----------+---------+---------+-------------
+ user_id       | integer                     |           |          |         | plain   | 
+ session_token | uuid                        |           |          |         | plain   | 
+ expiration    | timestamp without time zone |           |          |         | plain   | 
 View definition:
  SELECT sessions.user_id,
     sessions.session_token,
@@ -192,14 +178,14 @@ AS 'SELECT salt FROM users WHERE email = $1;'
   STABLE
   RETURNS NULL ON NULL INPUT;
 
-CREATE FUNCTION login(VARCHAR, BYTEA) RETURNS BYTEA
+CREATE FUNCTION login(VARCHAR, BYTEA) RETURNS uuid
 AS 'INSERT INTO sessions (user_id) SELECT user_id FROM users WHERE email = $1 AND password = $2 RETURNING session_token;'
   LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
-CREATE FUNCTION lookup_and_update_session(BYTEA) RETURNS BYTEA
-AS 'UPDATE sessions SET session_token = digest(gen_random_bytes(64), ''sha512'') WHERE session_token = $1 RETURNING session_token;'
+CREATE FUNCTION lookup_and_update_session(uuid) RETURNS uuid
+AS 'UPDATE sessions SET session_token = gen_random_uuid() WHERE session_token = $1 RETURNING session_token;'
   LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;
