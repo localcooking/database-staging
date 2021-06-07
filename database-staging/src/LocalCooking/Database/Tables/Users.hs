@@ -23,40 +23,50 @@ genRandomUUID = UnsafeExpression "gen_random_uuid()"
 
 type Schema =
   '[ "users" ::: UsersTable
+   , "active_users" ::: ActiveUsersView
    , "sessions" ::: SessionsTable
    ]
 
 type UsersTable =
   'Table
-    ('[ "pk_users" ::: 'PrimaryKey '["user_id"]
-      , "uq_email" ::: 'Unique '["email"]
+    ('[ "pk_users"        ::: 'PrimaryKey '["user_id"]
+      , "uq_email"        ::: 'Unique '["email"]
       , "password_length" ::: 'Check '["password"]
-      , "salt_length" ::: 'Check '["salt"]
-      , "continuity" ::: 'Check '["created_on", "last_login", "last_active", "deactivated_on"]
+      , "salt_length"     ::: 'Check '["salt"]
+      , "continuity"      ::: 'Check '["created_on", "last_login", "last_active", "deactivated_on"]
       ] :=>
-     '[ "user_id" ::: 'Def :=> 'NotNull 'PGint4
-      , "email" ::: 'NoDef :=> 'NotNull ('PGvarchar 255)
-      , "password" ::: 'NoDef :=> 'NotNull 'PGbytea
-      , "salt" ::: 'NoDef :=> 'NotNull 'PGbytea
-      , "created_on" ::: 'Def :=> 'NotNull 'PGtimestamptz
-      , "last_login" ::: 'NoDef :=> 'Null 'PGtimestamptz
-      , "last_active" ::: 'NoDef :=> 'Null 'PGtimestamptz
+     '[ "user_id"        ::: 'Def   :=> 'NotNull 'PGint4
+      , "email"          ::: 'NoDef :=> 'NotNull ('PGvarchar 255)
+      , "password"       ::: 'NoDef :=> 'NotNull 'PGbytea
+      , "salt"           ::: 'NoDef :=> 'NotNull 'PGbytea
+      , "created_on"     ::: 'Def   :=> 'NotNull 'PGtimestamptz
+      , "last_login"     ::: 'NoDef :=> 'Null 'PGtimestamptz
+      , "last_active"    ::: 'NoDef :=> 'Null 'PGtimestamptz
       , "deactivated_on" ::: 'NoDef :=> 'Null 'PGtimestamptz
       ])
 
+type ActiveUsersView =
+  'View
+     '[ "user_id"        ::: 'NotNull 'PGint4
+      , "email"          ::: 'NotNull ('PGvarchar 255)
+      , "password"       ::: 'NotNull 'PGbytea
+      , "salt"           ::: 'NotNull 'PGbytea
+      , "created_on"     ::: 'NotNull 'PGtimestamptz
+      , "last_login"     ::: 'Null 'PGtimestamptz
+      , "last_active"    ::: 'Null 'PGtimestamptz
+      , "deactivated_on" ::: 'Null 'PGtimestamptz
+      ]
+
 type SessionsTable =
   'Table
-    ('[ "fk_user_id" ::: 'ForeignKey '["user_id"] "public" "users" '["user_id"]
+    ('[ "fk_user_id"  ::: 'ForeignKey '["user_id"] "public" "users" '["user_id"]
       , "pk_sessions" ::: 'PrimaryKey '["session_token"]
       ] :=>
-     '[ "user_id" ::: 'NoDef :=> 'NotNull 'PGint4
-      , "session_token" ::: 'Def :=> 'NotNull 'PGuuid
-      , "expiration" ::: 'Def :=> 'NotNull 'PGtimestamptz
+     '[ "user_id"       ::: 'NoDef :=> 'NotNull 'PGint4
+      , "session_token" ::: 'Def   :=> 'NotNull 'PGuuid
+      , "expiration"    ::: 'Def   :=> 'NotNull 'PGtimestamptz
       ])
 
--- looks like we can't declare volatile, stable, etc.
--- type DeactivateUserFn =
---   'Function ( '[ 'Null ])
 
 deactivateUser :: MonadUnliftIO m => Int32 -> PQ (Public Schema) (Public Schema) m ()
 deactivateUser userId = transactionallyRetry defaultMode $ do
@@ -79,6 +89,7 @@ deactivateUser userId = transactionallyRetry defaultMode $ do
 definition :: Definition (Public '[]) (Public Schema)
 definition =
   users >>>
+  activeUsers >>>
   sessions
   where
     users = createTableIfNotExists #users
@@ -100,6 +111,10 @@ definition =
             .&& #last_login .<= #last_active
             .&& #last_active .<= #deactivated_on
           ) `as` #continuity
+      )
+
+    activeUsers = createOrReplaceView #active_users
+      (  select Star (from (table #users) & where_ (#deactivated_on & isNull))
       )
 
     sessions = createTableIfNotExists #sessions
