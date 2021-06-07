@@ -18,13 +18,14 @@ sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ chef_credentials" > tmp/ch
 sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ menus" > tmp/menus
 sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ items" > tmp/items
 sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ item_revisions" > tmp/itemRevisions
+sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ latest_active_item_revisions" > tmp/latestActiveItemRevisions
 sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ menu_item_mapping" > tmp/menuItemMapping
 sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ carts" > tmp/carts
 sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ orders" > tmp/orders
 sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ order_contents" > tmp/orderContents
 sudo -i -u postgres psql -d localcooking_tmp -c "\\d+ reviews" > tmp/reviews
 
-ltext "stage.template.sql tmp/users tmp/pendingRegistrations tmp/activePendingRegistrations tmp/sessions tmp/activeSessions tmp/chefs tmp/credentials tmp/chefCredentials tmp/menus tmp/items tmp/itemRevisions tmp/menuItemMapping tmp/carts tmp/orders tmp/orderContents tmp/reviews" \
+ltext "stage.template.sql tmp/users tmp/pendingRegistrations tmp/activePendingRegistrations tmp/sessions tmp/activeSessions tmp/chefs tmp/credentials tmp/chefCredentials tmp/menus tmp/items tmp/itemRevisions tmp/latestActiveItemRevisions tmp/menuItemMapping tmp/carts tmp/orders tmp/orderContents tmp/reviews" \
       -r "tmp/users" \
       -r "tmp/pendingRegistrations" \
       -r "tmp/activePendingRegistrations" \
@@ -36,6 +37,7 @@ ltext "stage.template.sql tmp/users tmp/pendingRegistrations tmp/activePendingRe
       -r "tmp/menus" \
       -r "tmp/items" \
       -r "tmp/itemRevisions" \
+      -r "tmp/latestActiveItemRevisions" \
       -r "tmp/menuItemMapping" \
       -r "tmp/carts" \
       -r "tmp/orders" \
