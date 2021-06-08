@@ -24,6 +24,7 @@ genRandomUUID = UnsafeExpression "gen_random_uuid()"
 type Schema =
   '[ "users" ::: UsersTable
    , "active_users" ::: ActiveUsersView
+   , "pending_registrations" ::: PendingRegistrationsTable
    , "sessions" ::: SessionsTable
    ]
 
@@ -56,6 +57,17 @@ type ActiveUsersView =
       , "last_active"    ::: 'Null 'PGtimestamptz
       , "deactivated_on" ::: 'Null 'PGtimestamptz
       ]
+
+type PendingRegistrationsTable =
+  'Table
+    ('[ "uq_email" ::: 'Unique '["email"]
+      , "pk_auth_token" ::: 'PrimaryKey '["auth_token"]
+      ] :=>
+     '[ "email"      ::: 'NoDef :=> 'NotNull ('PGvarchar 255)
+      , "auth_token" ::: 'Def :=> 'NotNull 'PGuuid
+      , "expiration" ::: 'Def :=> 'NotNull 'PGtimestamptz
+      ]
+    )
 
 type SessionsTable =
   'Table
@@ -90,6 +102,7 @@ definition :: Definition (Public '[]) (Public Schema)
 definition =
   users >>>
   activeUsers >>>
+  pendingRegistrations >>>
   sessions
   where
     users = createTableIfNotExists #users
@@ -115,6 +128,15 @@ definition =
 
     activeUsers = createOrReplaceView #active_users
       (  select Star (from (table #users) & where_ (#deactivated_on & isNull))
+      )
+
+    pendingRegistrations = createTableIfNotExists #pending_registrations
+      (  (varchar & notNullable) `as` #email
+      :* (uuid & notNullable & default_ genRandomUUID) `as` #auth_token
+      :* (timestamptz & notNullable & default_ (currentTimestamp !+ interval_ 1 Days)) `as` #expiration
+      )
+      (  unique #email `as` #uq_email
+      :* primaryKey #auth_token `as` #pk_auth_token
       )
 
     sessions = createTableIfNotExists #sessions
