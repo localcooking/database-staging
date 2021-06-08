@@ -22,10 +22,11 @@ genRandomUUID :: Expr (null 'PGuuid)
 genRandomUUID = UnsafeExpression "gen_random_uuid()"
 
 type Schema =
-  '[ "users" ::: UsersTable
-   , "active_users" ::: ActiveUsersView
-   , "pending_registrations" ::: PendingRegistrationsTable
-   , "sessions" ::: SessionsTable
+  '[ "users"                        ::: UsersTable
+   , "active_users"                 ::: ActiveUsersView
+   , "pending_registrations"        ::: PendingRegistrationsTable
+   , "active_pending_registrations" ::: ActivePendingRegistrationsView
+   , "sessions"                     ::: SessionsTable
    ]
 
 type UsersTable =
@@ -60,7 +61,7 @@ type ActiveUsersView =
 
 type PendingRegistrationsTable =
   'Table
-    ('[ "uq_email" ::: 'Unique '["email"]
+    ('[ "uq_email"      ::: 'Unique '["email"]
       , "pk_auth_token" ::: 'PrimaryKey '["auth_token"]
       ] :=>
      '[ "email"      ::: 'NoDef :=> 'NotNull ('PGvarchar 255)
@@ -68,6 +69,13 @@ type PendingRegistrationsTable =
       , "expiration" ::: 'Def :=> 'NotNull 'PGtimestamptz
       ]
     )
+
+type ActivePendingRegistrationsView =
+  'View
+    '[ "email"      ::: 'NotNull ('PGvarchar 255)
+     , "auth_token" ::: 'NotNull 'PGuuid
+     , "expiration" ::: 'NotNull 'PGtimestamptz
+     ]
 
 type SessionsTable =
   'Table
@@ -98,11 +106,19 @@ deactivateUser userId = transactionallyRetry defaultMode $ do
         (#user_id .== param @1 @('NotNull 'PGint4))
 
 
+expirePendingRegistrations :: Manipulation_ (Public Schema) () ()
+expirePendingRegistrations =
+  deleteFrom_
+    #pending_registrations
+    (#expiration .< currentTimestamp)
+
+
 definition :: Definition (Public '[]) (Public Schema)
 definition =
   users >>>
   activeUsers >>>
   pendingRegistrations >>>
+  activePendingRegistrations >>>
   sessions
   where
     users = createTableIfNotExists #users
@@ -137,6 +153,10 @@ definition =
       )
       (  unique #email `as` #uq_email
       :* primaryKey #auth_token `as` #pk_auth_token
+      )
+
+    activePendingRegistrations = createOrReplaceView #active_pending_registrations
+      (  select Star (from (table #pending_registrations) & where_ (#expiration .>= currentTimestamp))
       )
 
     sessions = createTableIfNotExists #sessions
