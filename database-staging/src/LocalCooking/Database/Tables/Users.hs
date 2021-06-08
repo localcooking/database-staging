@@ -6,6 +6,9 @@
   , DataKinds
   , GADTs
   , FlexibleContexts
+  , DerivingStrategies
+  , DeriveAnyClass
+  , DeriveGeneric
   #-}
 
 module LocalCooking.Database.Tables.Users where
@@ -14,6 +17,8 @@ import Data.Int (Int32)
 import Data.UUID (UUID)
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Squeal.PostgreSQL
+import qualified Generics.SOP as SOP
+import qualified GHC.Generics as GHC
 
 
 octetLength :: null 'PGbytea --> null 'PGint4
@@ -114,23 +119,33 @@ expirePendingRegistrations =
     (#expiration .< currentTimestamp)
 
 
-assignRegistration :: MonadUnliftIO m => VarChar 255 -> PQ (Public Schema) (Public Schema) m (Maybe UUID)
+data AuthToken = AuthToken {authToken :: UUID}
+  deriving stock (Show, GHC.Generic)
+  deriving anyclass (SOP.Generic, SOP.HasDatatypeInfo)
+
+
+assignRegistration :: MonadUnliftIO m => VarChar 255 -> PQ (Public Schema) (Public Schema) m (Maybe AuthToken)
 assignRegistration email = transactionallyRetry defaultMode $ do
-  mRow <- firstRow =<< execute $ query findExistingRevocation
+  res <- runQueryParams findExistingRevocation (Only email)
+  mRow <- firstRow res
   case mRow of
-    Nothing -> execute $ manipulate $
-      insertInto #pending_registrations
-        (Values_ (Set email `as` #email))
-        OnConflictDoRaise
-        (Returning (List #auth_token))
+    Nothing -> firstRow =<< manipulateParams addRegistration (Only email)
     Just _ -> pure Nothing
   where
-    findExistingRevocation :: Query '[] with (Public Schema)
-      '[ 'NotNull ('PGvarchar 255) ]
-      '[ "auth_token" ::: 'NotNull 'PGuuid ]
+    findExistingRevocation :: Query_ (Public Schema) (Only (VarChar 255)) AuthToken
+      -- '[ 'NotNull ('PGvarchar 255) ]
+      -- '[ "auth_token" ::: 'NotNull 'PGuuid ]
     findExistingRevocation =
-      select (List #auth_token) $ from (table #users) & where_
-        (#email .== param @1 @('NotNull ('PGvarchar 255)) .&& (#deactivated_on & isNull))
+      select (#auth_token `as` #authToken) $ from (table #users) & where_
+        (#email .== param @1 .&& (#deactivated_on & isNull))
+
+    addRegistration :: Manipulation_ (Public Schema) (Only (VarChar 255)) AuthToken
+      -- '[ 'NotNull ('PGvarchar 255) ] '[ "auth_token" ::: 'NotNull 'PGuuid ]
+    addRegistration =
+      insertInto #pending_registrations
+        (Values_ (Set (param @1) `as` #email :* Default `as` #auth_token :* Default `as` #expiration))
+        OnConflictDoRaise
+        (Returning_ (#auth_token `as` #authToken))
 
 
 definition :: Definition (Public '[]) (Public Schema)

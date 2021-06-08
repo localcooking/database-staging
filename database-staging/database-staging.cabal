@@ -1,8 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.33.0.
 --
 -- see: https://github.com/sol/hpack
+--
+-- hash: c90a85940a333855636b83c2df17138d9af595a35cf4bf38ad810da146be813b
 
 name:           database-staging
 version:        0.1.0.0
@@ -33,8 +35,10 @@ library
       src
   build-depends:
       base >=4.7 && <5
+    , generics-sop
     , squeal-postgresql ==0.7.0.1
     , unliftio-core
+    , uuid ==1.3.15
   default-language: Haskell2010
 
 executable database-staging-exe
@@ -47,8 +51,10 @@ executable database-staging-exe
   build-depends:
       base >=4.7 && <5
     , database-staging
+    , generics-sop
     , squeal-postgresql ==0.7.0.1
     , unliftio-core
+    , uuid ==1.3.15
   default-language: Haskell2010
 
 test-suite database-staging-test
@@ -62,6 +68,8 @@ test-suite database-staging-test
   build-depends:
       base >=4.7 && <5
     , database-staging
+    , generics-sop
     , squeal-postgresql ==0.7.0.1
     , unliftio-core
+    , uuid ==1.3.15
   default-language: Haskell2010

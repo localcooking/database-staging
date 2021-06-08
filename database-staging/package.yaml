@@ -21,8 +21,9 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- generics-sop
 - unliftio-core
-- uuid
+- uuid == 1.3.15
 - squeal-postgresql == 0.7.0.1
 
 library:
