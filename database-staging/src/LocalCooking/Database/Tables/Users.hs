@@ -11,6 +11,7 @@
 module LocalCooking.Database.Tables.Users where
 
 import Data.Int (Int32)
+import Data.UUID (UUID)
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Squeal.PostgreSQL
 
@@ -111,6 +112,25 @@ expirePendingRegistrations =
   deleteFrom_
     #pending_registrations
     (#expiration .< currentTimestamp)
+
+
+assignRegistration :: MonadUnliftIO m => VarChar 255 -> PQ (Public Schema) (Public Schema) m (Maybe UUID)
+assignRegistration email = transactionallyRetry defaultMode $ do
+  mRow <- firstRow =<< execute $ query findExistingRevocation
+  case mRow of
+    Nothing -> execute $ manipulate $
+      insertInto #pending_registrations
+        (Values_ (Set email `as` #email))
+        OnConflictDoRaise
+        (Returning (List #auth_token))
+    Just _ -> pure Nothing
+  where
+    findExistingRevocation :: Query '[] with (Public Schema)
+      '[ 'NotNull ('PGvarchar 255) ]
+      '[ "auth_token" ::: 'NotNull 'PGuuid ]
+    findExistingRevocation =
+      select (List #auth_token) $ from (table #users) & where_
+        (#email .== param @1 @('NotNull ('PGvarchar 255)) .&& (#deactivated_on & isNull))
 
 
 definition :: Definition (Public '[]) (Public Schema)
