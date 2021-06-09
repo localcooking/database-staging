@@ -124,18 +124,12 @@ comment on view active_pending_registrations is 'Any pending registrations that 
 
 CREATE FUNCTION assign_registration(email_ VARCHAR) RETURNS uuid AS
 $$
-BEGIN
   -- Find an active user with the same email
-  SELECT 1 FROM users WHERE email = email_ AND deactivated_on IS NULL;
-
-  IF NOT found THEN -- If it doesn't exist, assign the registration token
-    INSERT INTO pending_registrations (email) VALUES ($1) RETURNING auth_token;
-  ELSE
-    RETURN NULL;
-  END IF;
-END;
+  INSERT INTO pending_registrations (email) SELECT $1 WHERE NOT EXISTS
+    (SELECT 1 FROM users WHERE email = email_ AND deactivated_on IS NULL)
+    RETURNING auth_token;
 $$
-  LANGUAGE plpgsql
+  LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
