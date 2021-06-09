@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c90a85940a333855636b83c2df17138d9af595a35cf4bf38ad810da146be813b
+-- hash: cde574e2d620529beabf17c56900c405667cdee83cd80e1f076401a26263f487
 
 name:           database-staging
 version:        0.1.0.0
@@ -37,6 +37,7 @@ library
       base >=4.7 && <5
     , generics-sop
     , squeal-postgresql ==0.7.0.1
+    , time
     , unliftio-core
     , uuid ==1.3.15
   default-language: Haskell2010
@@ -53,6 +54,7 @@ executable database-staging-exe
     , database-staging
     , generics-sop
     , squeal-postgresql ==0.7.0.1
+    , time
     , unliftio-core
     , uuid ==1.3.15
   default-language: Haskell2010
@@ -70,6 +72,7 @@ test-suite database-staging-test
     , database-staging
     , generics-sop
     , squeal-postgresql ==0.7.0.1
+    , time
     , unliftio-core
     , uuid ==1.3.15
   default-language: Haskell2010

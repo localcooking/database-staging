@@ -15,6 +15,8 @@ module LocalCooking.Database.Tables.Users where
 
 import Data.Int (Int32)
 import Data.UUID (UUID)
+import Data.Time (UTCTime)
+import Data.Maybe (isJust)
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Squeal.PostgreSQL
 import qualified Generics.SOP as SOP
@@ -118,34 +120,35 @@ expirePendingRegistrations =
     #pending_registrations
     (#expiration .< currentTimestamp)
 
-
-data AuthToken = AuthToken {authToken :: UUID}
-  deriving stock (Show, GHC.Generic)
-  deriving anyclass (SOP.Generic, SOP.HasDatatypeInfo)
-
-
-assignRegistration :: MonadUnliftIO m => VarChar 255 -> PQ (Public Schema) (Public Schema) m (Maybe AuthToken)
-assignRegistration email = transactionallyRetry defaultMode $ do
-  res <- runQueryParams findExistingRevocation (Only email)
-  mRow <- firstRow res
-  case mRow of
-    Nothing -> firstRow =<< manipulateParams addRegistration (Only email)
-    Just _ -> pure Nothing
+findExistingNotDeactivatedUser' :: VarChar 255 -> PQ (Public Schema) (Public Schema) m Bool
+findExistingNotDeactivatedUser' email = do
+  rows <- runQueryParams findExistingNotDeactivatedUser (Only email)
+  -- isJust <$> firstRow rows
+  pure True
   where
-    findExistingRevocation :: Query_ (Public Schema) (Only (VarChar 255)) AuthToken
-      -- '[ 'NotNull ('PGvarchar 255) ]
-      -- '[ "auth_token" ::: 'NotNull 'PGuuid ]
-    findExistingRevocation =
-      select (#auth_token `as` #authToken) $ from (table #users) & where_
-        (#email .== param @1 .&& (#deactivated_on & isNull))
+    findExistingNotDeactivatedUser :: Query_ (Public Schema) (Only (VarChar 255)) (Only Int32)
+    findExistingNotDeactivatedUser =
+      select_ (1 `as` #fromOnly) $ from (table #users) & where_
+        (#email .== param @1 @('NotNull ('PGvarchar 255)) .&& (#deactivated_on & isNull))
 
-    addRegistration :: Manipulation_ (Public Schema) (Only (VarChar 255)) AuthToken
+assignRegistration :: MonadPQ (Public Schema) m
+                   => MonadUnliftIO m
+                   => VarChar 255 -> m (Maybe UUID)
+assignRegistration email = do -- transactionallyRetry defaultMode $ do
+  doesExist <- findExistingNotDeactivatedUser' email
+  if doesExist
+    then pure Nothing
+    else firstRow =<< manipulateParams addRegistration (Only email)
+  where
+    addRegistration :: Manipulation_ (Public Schema) (Only (VarChar 255)) (Only UUID)
       -- '[ 'NotNull ('PGvarchar 255) ] '[ "auth_token" ::: 'NotNull 'PGuuid ]
     addRegistration =
       insertInto #pending_registrations
-        (Values_ (Set (param @1) `as` #email :* Default `as` #auth_token :* Default `as` #expiration))
+        ( Values_ (Set (param @1) `as` #email :* Default `as` #auth_token :* Default `as` #expiration)
+            -- (from (subquery #users) & where_ (not_ $ exists findExistingNotDeactivatedUser))
+        )
         OnConflictDoRaise
-        (Returning_ (#auth_token `as` #authToken))
+        (Returning_ (#auth_token `as` #fromOnly))
 
 
 definition :: Definition (Public '[]) (Public Schema)
