@@ -26,15 +26,46 @@ comment on column users.password is 'Argon2 hashed output';
 comment on column users.salt is 'Unique salt per-user';
 comment on column users.deactivated_on is 'Allows a user to pseudo-delete their account without our record-books being corrupted';
 
-CREATE OR REPLACE FUNCTION deactivate_user(user_id_ INT) RETURNS void AS
+CREATE OR REPLACE FUNCTION session_deactivate_user(session_token_ uuid) RETURNS timestamptz AS
 $$
+DECLARE
+  user_id_ INT;
+  deactivated_on_ timestamptz;
 BEGIN
-  UPDATE users SET deactivated_on = CURRENT_TIMESTAMP WHERE user_id = user_id_ RETURNING deactivated_on;
-  DELETE FROM sessions WHERE user_id = user_id_; -- Revoke sessions
+  SELECT get_logged_in_user_id(session_token_) INTO user_id_;
+  SELECT admin_deactivate_user(user_id_) INTO deactivated_on_;
+  RETURN deactivated_on_;
 END;
 $$
   LANGUAGE plpgsql
-  VOLATILE;
+  VOLATILE
+  RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION admin_deactivate_user(user_id_ INT) RETURNS timestamptz AS
+$$
+DECLARE
+  deactivated_on_ timestamptz;
+BEGIN
+  UPDATE users SET deactivated_on = CURRENT_TIMESTAMP
+    WHERE user_id = user_id_
+    RETURNING deactivated_on INTO deactivated_on_;
+  DELETE FROM sessions WHERE user_id = user_id_; -- Revoke sessions
+  RETURN deactivated_on_;
+END;
+$$
+  LANGUAGE plpgsql
+  VOLATILE
+  RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION admin_activate_user(user_id_ INT) RETURNS INT AS
+$$
+  UPDATE users SET deactivated_on = NULL
+  WHERE user_id = user_id_
+  RETURNING user_id;
+$$
+  LANGUAGE SQL
+  VOLATILE
+  RETURNS NULL ON NULL INPUT;
 
 CREATE VIEW active_users AS
   SELECT * FROM users WHERE deactivated_on IS NULL;
@@ -79,12 +110,21 @@ comment on view active_pending_registrations is 'Any pending registrations that 
 
 CREATE OR REPLACE FUNCTION assign_registration(email_ VARCHAR) RETURNS uuid AS
 $$
+DECLARE
+  found_user_ INT;
+  returned_session_ uuid;
+BEGIN
+  SELECT user_id INTO found_user_ FROM users WHERE email = email_ AND deactivated_on IS NULL;
   -- Find an active user with the same email
-  INSERT INTO pending_registrations (email) SELECT $1 WHERE NOT EXISTS
-    (SELECT 1 FROM users WHERE email = email_ AND deactivated_on IS NULL)
-    RETURNING auth_token;
+  IF found_user_ IS NULL THEN
+    INSERT INTO pending_registrations (email) VALUES (email_) RETURNING auth_token INTO returned_session_;
+    RETURN returned_session_;
+  ELSE
+    RAISE 'User with email % already exists', email_;
+  END IF;
+END;
 $$
-  LANGUAGE SQL
+  LANGUAGE plpgsql
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
@@ -92,40 +132,37 @@ CREATE OR REPLACE FUNCTION register(registration_ uuid, email_ VARCHAR, password
 $$
 DECLARE
   uid INT;
-  is_pending INT;
+  is_pending_ INT;
+  already_exists_ INT;
 BEGIN
-  -- Ensure a valid pending registration exists
-  SELECT 1 INTO is_pending FROM pending_registrations
-    WHERE email = email_
-      AND auth_token = registration_
-      AND expiration >= CURRENT_TIMESTAMP;
+  -- Make sure the email doesn't already exist
+  SELECT 1 INTO already_exists_ FROM users
+  WHERE email = email_;
 
-  IF is_pending = 1 THEN
-    -- delete it
-    DELETE FROM pending_registrations
-    WHERE auth_token = registration_
-    AND expiration >= CURRENT_TIMESTAMP
-    AND email = email_;
-
-    -- Is the user just deactivated?
-    -- SELECT 1 FROM users WHERE email = email_;
-
-    -- IF found THEN
-    --   -- reactivate user
-    --   UPDATE users SET deactivated_on = NULL WHERE email = email_;
-    -- ELSE
-      -- insert the info into the user's column
-    INSERT INTO users (email, password, salt)
-    VALUES (email_, password_, salt_)
-    -- WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = email_) -- Redundant
-    -- ON CONFLICT DO UPDATE SET deactivated_on = NULL -- Don't make registration the same thing as reactivation
-    -- WHERE email = email_ AND password = password_ AND salt = salt_ -- what if the password is incorrect?
-    RETURNING user_id INTO uid;
-    -- END IF;
-    RETURN uid;
+  IF already_exists_ = 1 THEN
+    RAISE 'email % aready registered', email_;
   ELSE
-    RAISE 'Pending registration not found: %', is_pending;
-    RETURN NULL;
+    -- Ensure a valid pending registration exists
+    SELECT 1 INTO is_pending_ FROM pending_registrations
+      WHERE email = email_
+        AND auth_token = registration_
+        AND expiration >= CURRENT_TIMESTAMP;
+
+    IF is_pending_ = 1 THEN
+      -- delete it
+      DELETE FROM pending_registrations
+      WHERE auth_token = registration_
+      AND expiration >= CURRENT_TIMESTAMP
+      AND email = email_;
+
+      -- insert the info into the user's column
+      INSERT INTO users (email, password, salt)
+      VALUES (email_, password_, salt_)
+      RETURNING user_id INTO uid;
+      RETURN uid;
+    ELSE
+      RAISE 'Pending registration not found: %', registration_;
+    END IF;
   END IF;
 END;
 $$
@@ -180,32 +217,51 @@ $$
   STABLE
   RETURNS NULL ON NULL INPUT;
 
+CREATE OR REPLACE FUNCTION get_logged_in_user_id(session_token_ uuid) RETURNS INT AS
+$$
+  SELECT user_id FROM sessions WHERE session_token = session_token_;
+$$
+  LANGUAGE SQL
+  STABLE
+  RETURNS NULL ON NULL INPUT;
+
 CREATE OR REPLACE FUNCTION login(email_ VARCHAR, password_ BYTEA) RETURNS uuid AS
 $$
 DECLARE
-  user_id_ INT;
+  -- user_id_ INT;
+  -- deactivated_on_ timestamptz;
+  correct_creds RECORD;
   active_session uuid;
 BEGIN
-  SELECT INTO user_id_ user_id FROM users WHERE email = email_ AND password = password_;
-  UPDATE users SET last_login = CURRENT_TIMESTAMP, last_active = CURRENT_TIMESTAMP WHERE user_id = user_id_; -- update last login
-  INSERT INTO sessions (user_id) VALUES (user_id_) RETURNING session_token INTO active_session; -- insert session
-  RETURN active_session;
+  SELECT INTO correct_creds user_id, deactivated_on FROM users
+    WHERE email = email_ AND password = password_;
+  IF correct_creds.deactivated_on IS NOT NULL THEN
+    RAISE 'User has been deactivated on %', correct_creds.deactivated_on;
+  ELSE
+    UPDATE users SET last_login = CURRENT_TIMESTAMP, last_active = CURRENT_TIMESTAMP
+      WHERE user_id = correct_creds.user_id; -- update last login
+    INSERT INTO sessions (user_id) VALUES (correct_creds.user_id)
+      RETURNING session_token INTO active_session; -- insert session
+    RETURN active_session;
+  END IF;
 END;
 $$
   LANGUAGE plpgsql
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+-- Should be done last in any authenticated transaction
 CREATE OR REPLACE FUNCTION touch_session(session_token_ uuid) RETURNS uuid AS
 $$
 DECLARE
   user_id_ INT;
   active_session uuid;
 BEGIN
-  SELECT INTO user_id_ user_id FROM sessions WHERE session_token = session_token_; -- find logged-in user
+  SELECT get_logged_in_user_id(session_token_) INTO user_id_; -- find logged-in user
   UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE user_id = user_id_; -- update last active
   UPDATE sessions SET session_token = gen_random_uuid()
-    WHERE session_token = session_token_ RETURNING session_token INTO active_session;
+    WHERE session_token = session_token_ AND user_id = user_id_
+    RETURNING session_token INTO active_session;
   RETURN active_session;
 END;
 $$
@@ -244,7 +300,10 @@ CREATE TABLE IF NOT EXISTS chefs (
 );
 
 
-CREATE OR REPLACE FUNCTION enroll(user_id_ INT, public_name_ VARCHAR, subscription_ subscription_type, subscription_expiration_ TIMESTAMPTZ) RETURNS INT AS
+CREATE OR REPLACE FUNCTION admin_enroll(user_id_ INT,
+                                        public_name_ VARCHAR,
+                                        subscription_ subscription_type,
+                                        subscription_expiration_ TIMESTAMPTZ) RETURNS INT AS
 $$
   INSERT INTO chefs (user_id, public_name, subscription, subscription_expiration)
   VALUES (user_id_, public_name_, subscription_, subscription_expiration_) RETURNING chef_id;
@@ -253,7 +312,7 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
-CREATE OR REPLACE FUNCTION disenroll(chef_id_ INT) RETURNS void AS
+CREATE OR REPLACE FUNCTION admin_disenroll(chef_id_ INT) RETURNS void AS
 $$
 BEGIN
   -- revoke chef
@@ -303,6 +362,8 @@ CREATE TABLE IF NOT EXISTS chef_credentials (
   credential_id INT NOT NULL REFERENCES credentials (credential_id) ON DELETE RESTRICT,
   UNIQUE (chef_id, credential_id) -- A chef can't have two of the same credential
 );
+
+-- TODO need to add creds, remove / delete them, and also menus, items, etc.
 
 CREATE OR REPLACE FUNCTION get_chef_credentials(chef_id_ INT) RETURNS record AS
 $$
