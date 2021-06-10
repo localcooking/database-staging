@@ -26,7 +26,7 @@ comment on column users.password is 'Argon2 hashed output';
 comment on column users.salt is 'Unique salt per-user';
 comment on column users.deactivated_on is 'Allows a user to pseudo-delete their account without our record-books being corrupted';
 
-CREATE FUNCTION deactivate_user(user_id_ INT) RETURNS void AS
+CREATE OR REPLACE FUNCTION deactivate_user(user_id_ INT) RETURNS void AS
 $$
 BEGIN
   UPDATE users SET deactivated_on = CURRENT_TIMESTAMP WHERE user_id = user_id_ RETURNING deactivated_on;
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS pending_registrations (
 comment on table pending_registrations is 'Any pending registrations that need to click the email link';
 
 -- TODO call from a cron job
-CREATE FUNCTION expire_pending_registrations() RETURNS void AS
+CREATE OR REPLACE FUNCTION expire_pending_registrations() RETURNS void AS
 $$
   DELETE FROM pending_registrations WHERE expiration < CURRENT_TIMESTAMP;
 $$
@@ -77,7 +77,7 @@ CREATE VIEW active_pending_registrations AS
 
 comment on view active_pending_registrations is 'Any pending registrations that are not expired';
 
-CREATE FUNCTION assign_registration(email_ VARCHAR) RETURNS uuid AS
+CREATE OR REPLACE FUNCTION assign_registration(email_ VARCHAR) RETURNS uuid AS
 $$
   -- Find an active user with the same email
   INSERT INTO pending_registrations (email) SELECT $1 WHERE NOT EXISTS
@@ -88,31 +88,43 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
-CREATE FUNCTION register(registration_ uuid, email_ VARCHAR, password_ BYTEA, salt_ BYTEA) RETURNS INT AS
+CREATE OR REPLACE FUNCTION register(registration_ uuid, email_ VARCHAR, password_ BYTEA, salt_ BYTEA) RETURNS INT AS
 $$
+DECLARE
+  uid INT;
+  is_pending INT;
 BEGIN
   -- Ensure a valid pending registration exists
-  SELECT 1 FROM pending_registrations WHERE email = email_ AND auth_token = registration_ AND expiration >= CURRENT_TIMESTAMP;
+  SELECT 1 INTO is_pending FROM pending_registrations
+    WHERE email = email_
+      AND auth_token = registration_
+      AND expiration >= CURRENT_TIMESTAMP;
 
-  IF found THEN
+  IF is_pending = 1 THEN
     -- delete it
     DELETE FROM pending_registrations
-    WHERE auth_token = registration_ AND expiration >= CURRENT_TIMESTAMP AND email = email_;
+    WHERE auth_token = registration_
+    AND expiration >= CURRENT_TIMESTAMP
+    AND email = email_;
 
     -- Is the user just deactivated?
-    SELECT 1 FROM users WHERE email = email_;
+    -- SELECT 1 FROM users WHERE email = email_;
 
-    IF found THEN
-      -- reactivate user
-      UPDATE users SET deactivated_on = NULL WHERE email = email_;
-    ELSE
+    -- IF found THEN
+    --   -- reactivate user
+    --   UPDATE users SET deactivated_on = NULL WHERE email = email_;
+    -- ELSE
       -- insert the info into the user's column
-      INSERT INTO users (email, password, salt)
-      VALUES (email_, password_, salt_)
-      ON CONFLICT DO UPDATE SET deactivated_on = NULL WHERE email = email_ -- what if the password is incorrect?
-      RETURNING user_id;
-    END IF;
+    INSERT INTO users (email, password, salt)
+    VALUES (email_, password_, salt_)
+    -- WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = email_) -- Redundant
+    -- ON CONFLICT DO UPDATE SET deactivated_on = NULL -- Don't make registration the same thing as reactivation
+    -- WHERE email = email_ AND password = password_ AND salt = salt_ -- what if the password is incorrect?
+    RETURNING user_id INTO uid;
+    -- END IF;
+    RETURN uid;
   ELSE
+    RAISE 'Pending registration not found: %', is_pending;
     RETURN NULL;
   END IF;
 END;
@@ -140,7 +152,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 comment on table sessions is 'Any active logged-in users, with their session token and expiration';
 
 -- TODO call from a cron job
-CREATE FUNCTION expire_sessions() RETURNS void AS
+CREATE OR REPLACE FUNCTION expire_sessions() RETURNS void AS
 $$
   DELETE FROM sessions WHERE expiration < CURRENT_TIMESTAMP;
 $$
@@ -160,7 +172,7 @@ sessions are legitimate.
 CREATE VIEW active_sessions AS
   SELECT * FROM sessions WHERE expiration >= CURRENT_TIMESTAMP;
 
-CREATE FUNCTION get_login_salt(email_ VARCHAR) RETURNS BYTEA AS
+CREATE OR REPLACE FUNCTION get_login_salt(email_ VARCHAR) RETURNS BYTEA AS
 $$
   SELECT salt FROM users WHERE email = email_;
 $$
@@ -168,35 +180,40 @@ $$
   STABLE
   RETURNS NULL ON NULL INPUT;
 
-CREATE FUNCTION login(email_ VARCHAR, password_ BYTEA) RETURNS uuid AS
+CREATE OR REPLACE FUNCTION login(email_ VARCHAR, password_ BYTEA) RETURNS uuid AS
 $$
 DECLARE
   user_id_ INT;
+  active_session uuid;
 BEGIN
   SELECT INTO user_id_ user_id FROM users WHERE email = email_ AND password = password_;
   UPDATE users SET last_login = CURRENT_TIMESTAMP, last_active = CURRENT_TIMESTAMP WHERE user_id = user_id_; -- update last login
-  INSERT INTO sessions (user_id) VALUES (user_id_) RETURNING session_token; -- insert session
+  INSERT INTO sessions (user_id) VALUES (user_id_) RETURNING session_token INTO active_session; -- insert session
+  RETURN active_session;
 END;
 $$
   LANGUAGE plpgsql
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
-CREATE FUNCTION touch_session(session_token_ uuid) RETURNS uuid AS
+CREATE OR REPLACE FUNCTION touch_session(session_token_ uuid) RETURNS uuid AS
 $$
 DECLARE
   user_id_ INT;
+  active_session uuid;
 BEGIN
   SELECT INTO user_id_ user_id FROM sessions WHERE session_token = session_token_; -- find logged-in user
   UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE user_id = user_id_; -- update last active
-  UPDATE sessions SET session_token = gen_random_uuid() WHERE session_token = session_token_ RETURNING session_token;
+  UPDATE sessions SET session_token = gen_random_uuid()
+    WHERE session_token = session_token_ RETURNING session_token INTO active_session;
+  RETURN active_session;
 END;
 $$
   LANGUAGE plpgsql
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
-CREATE FUNCTION logout(session_token_ uuid) RETURNS INT AS
+CREATE OR REPLACE FUNCTION logout(session_token_ uuid) RETURNS INT AS
 $$
   DELETE FROM sessions WHERE session_token = session_token_ RETURNING user_id;
 $$
@@ -227,7 +244,7 @@ CREATE TABLE IF NOT EXISTS chefs (
 );
 
 
-CREATE FUNCTION enroll(user_id_ INT, public_name_ VARCHAR, subscription_ subscription_type, subscription_expiration_ TIMESTAMPTZ) RETURNS INT AS
+CREATE OR REPLACE FUNCTION enroll(user_id_ INT, public_name_ VARCHAR, subscription_ subscription_type, subscription_expiration_ TIMESTAMPTZ) RETURNS INT AS
 $$
   INSERT INTO chefs (user_id, public_name, subscription, subscription_expiration)
   VALUES (user_id_, public_name_, subscription_, subscription_expiration_) RETURNING chef_id;
@@ -236,7 +253,7 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
-CREATE FUNCTION disenroll(chef_id_ INT) RETURNS void AS
+CREATE OR REPLACE FUNCTION disenroll(chef_id_ INT) RETURNS void AS
 $$
 BEGIN
   -- revoke chef
@@ -251,7 +268,7 @@ BEGIN
               ON menu_item_mapping.item_id = items.item_id
       WHERE menus.chef_id = chef_id_
   )
-  UPDATE items SET items.deleted_on = CURRENT_TIMESTAMP FROM chefs_items
+  UPDATE items SET deleted_on = CURRENT_TIMESTAMP FROM chefs_items
   WHERE items.item_id = chefs_items.item_id;
 
 END;
@@ -287,7 +304,7 @@ CREATE TABLE IF NOT EXISTS chef_credentials (
   UNIQUE (chef_id, credential_id) -- A chef can't have two of the same credential
 );
 
-CREATE FUNCTION get_chef_credentials(chef_id_ INT) RETURNS record AS
+CREATE OR REPLACE FUNCTION get_chef_credentials(chef_id_ INT) RETURNS record AS
 $$
   SELECT credentials.credential_id, credentials.title, credentials.description
   AS credential_id, title, description
@@ -404,7 +421,7 @@ CREATE TABLE IF NOT EXISTS menu_item_mapping (
 -- );
 
 -- TODO should I also get the latest version?
-CREATE FUNCTION get_menu_items(menu_id_ INT) RETURNS record AS
+CREATE OR REPLACE FUNCTION get_menu_items(menu_id_ INT) RETURNS record AS
 $$
   SELECT items.item_id, items.deleted_on, items.created_on
   AS item_id, deleted_on, created_on
@@ -435,7 +452,7 @@ CREATE TABLE IF NOT EXISTS carts (
 );
 -- When a user checks out, their cart rows are deleted - nothing references this table.
 
-CREATE FUNCTION get_cart(user_id_ INT) RETURNS record AS
+CREATE OR REPLACE FUNCTION get_cart(user_id_ INT) RETURNS record AS
 $$
   SELECT carts.cart_id, carts.item_id, carts.unseen_revision, carts.quantity, carts.added_on
   AS cart_id, item_id, unseen_revision, quantity, added_on
@@ -492,12 +509,13 @@ CREATE TABLE IF NOT EXISTS reviews (
 );
 
 
-CREATE FUNCTION review(order_content_id_ INT, title_ VARCHAR, description_ VARCHAR, stars_ decimal) RETURNS INT AS
+CREATE OR REPLACE FUNCTION review(order_content_id_ INT, title_ VARCHAR, description_ VARCHAR, stars_ decimal) RETURNS INT AS
 $$
 DECLARE
   ratings_ INT;
   rating_ decimal;
   item_id_ INT;
+  returned_rating INT;
 BEGIN
   -- find the previous item's ratings
   SELECT items.ratings, items.rating, items.item_id INTO ratings_, rating_, item_id_
@@ -513,7 +531,8 @@ BEGIN
   -- insert the review
   INSERT INTO reviews (order_content_id, title, description, stars)
     VALUES (order_content_id_, title_, description_, stars_)
-    RETURNING review_id;
+           RETURNING review_id INTO returned_rating;
+  RETURN returned_rating;
 END;
 $$
   LANGUAGE plpgsql
