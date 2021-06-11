@@ -285,6 +285,7 @@ $$
   STABLE
   RETURNS NULL ON NULL INPUT;
 
+-- FIXME raise when session doesn't exist?
 CREATE OR REPLACE FUNCTION get_logged_in_user_id(session_token_ uuid) RETURNS INT AS
 $$
   SELECT user_id FROM sessions WHERE session_token = session_token_;
@@ -303,7 +304,6 @@ DECLARE
 BEGIN
   SELECT INTO correct_creds user_id, deactivated_on FROM users
     WHERE email = email_ AND password = password_;
-  RAISE NOTICE 'deactivated_on_: %', correct_creds.deactivated_on;
   IF correct_creds.deactivated_on IS NOT NULL THEN
     RAISE 'User has been deactivated on %', correct_creds.deactivated_on;
   ELSE
@@ -319,6 +319,7 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+-- Should be done last in any authenticated transaction
 CREATE OR REPLACE FUNCTION touch_session(session_token_ uuid) RETURNS uuid AS
 $$
 DECLARE
@@ -388,7 +389,10 @@ CREATE TABLE IF NOT EXISTS chefs (
 );
 
 
-CREATE OR REPLACE FUNCTION enroll(user_id_ INT, public_name_ VARCHAR, subscription_ subscription_type, subscription_expiration_ TIMESTAMPTZ) RETURNS INT AS
+CREATE OR REPLACE FUNCTION admin_enroll(user_id_ INT,
+                                        public_name_ VARCHAR,
+                                        subscription_ subscription_type,
+                                        subscription_expiration_ TIMESTAMPTZ) RETURNS INT AS
 $$
   INSERT INTO chefs (user_id, public_name, subscription, subscription_expiration)
   VALUES (user_id_, public_name_, subscription_, subscription_expiration_) RETURNING chef_id;
@@ -397,7 +401,7 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
-CREATE OR REPLACE FUNCTION disenroll(chef_id_ INT) RETURNS void AS
+CREATE OR REPLACE FUNCTION admin_disenroll(chef_id_ INT) RETURNS void AS
 $$
 BEGIN
   -- revoke chef
@@ -470,6 +474,8 @@ CREATE TABLE IF NOT EXISTS chef_credentials (
   UNIQUE (chef_id, credential_id) -- A chef can't have two of the same credential
 );
 
+-- TODO need to add creds, remove / delete them, and also menus, items, etc.
+
 CREATE OR REPLACE FUNCTION get_chef_credentials(chef_id_ INT) RETURNS record AS
 $$
   SELECT credentials.credential_id, credentials.title, credentials.description
@@ -480,6 +486,22 @@ $$
     WHERE chef_credentials.chef_id = chef_id_;
 $$
   LANGUAGE SQL
+  STABLE
+  RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION validate_chef_session(session_token_ uuid) RETURNS INT AS
+$$
+DECLARE
+  user_id_ INT;
+  chef_id_ INT;
+BEGIN
+  SELECT get_logged_in_user_id(session_token_) INTO user_id_;
+  SELECT INTO chef_id_ chef_id FROM chefs WHERE user_id = user_id_; -- FIXME raise when not found?
+  RETURN chef_id_;
+END;
+$$
+  LANGUAGE plpgsql
   STABLE
   RETURNS NULL ON NULL INPUT;
 
@@ -513,6 +535,35 @@ CREATE TABLE IF NOT EXISTS menus (
   -- TODO images
 );
 /* TODO constraints - one menu for free, three for premium, 10 for gold, inf for platinum */
+
+
+CREATE OR REPLACE FUNCTION create_menu(session_token_ uuid, title_ VARCHAR, description_ VARCHAR) RETURNS INT AS
+$$
+DECLARE
+  chef_id_ INT;
+  menu_id_ INT;
+BEGIN
+  SELECT validate_chef_session(session_token_) INTO chef_id_;
+  SELECT admin_create_menu(chef_id_, title_, description_) INTO menu_id_;
+  RETURN menu_id_;
+END;
+$$
+  LANGUAGE plpgsql
+  VOLATILE
+  RETURNS NULL ON NULL INPUT;
+
+
+-- FIXME "system" vs. "admin" verbiage
+CREATE OR REPLACE FUNCTION admin_create_menu(chef_id_ INT, title_ VARCHAR, description_ VARCHAR) RETURNS INT AS
+$$
+  INSERT INTO menus (chef_id, title, description)
+  VALUES (chef_id_, title_, description_)
+         RETURNING menu_id;
+$$
+  LANGUAGE SQL
+  VOLATILE
+  RETURNS NULL ON NULL INPUT;
+
 
 /*
 Menu items are the actual products that users can purchase, which may be showcased in one or more
