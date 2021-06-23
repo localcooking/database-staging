@@ -93,7 +93,6 @@ $$
 CREATE VIEW active_users AS
   SELECT * FROM users WHERE deactivated_on IS NULL;
 
-
 /*
 Here, during registration, we email the address a link with a unique token,
 to verify the email is authentic. Furthermore, in the email with a "click here to complete"
@@ -505,7 +504,6 @@ $$
   STABLE
   RETURNS NULL ON NULL INPUT;
 
-
 /*
 Menus are the curated options that users can select to purchase orders from chefs.
 
@@ -563,7 +561,6 @@ $$
   LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;
-
 
 /*
 Menu items are the actual products that users can purchase, which may be showcased in one or more

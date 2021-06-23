@@ -1,5 +1,20 @@
 #! /bin/bash
 
+# Populate index
+
+ltext "index.template.sql users.template.sql pendingRegistrations.template.sql sessions.template.sql chefs.template.sql menus.template.sql items.template.sql carts.template.sql orders.template.sql reviews.template.sql" \
+      -r "users.template.sql" \
+      -r "pendingRegistrations.template.sql" \
+      -r "sessions.template.sql" \
+      -r "chefs.template.sql" \
+      -r "menus.template.sql" \
+      -r "items.template.sql" \
+      -r "carts.template.sql" \
+      -r "orders.template.sql" \
+      -r "reviews.template.sql" \
+      > stage.template.sql
+
+# Populate documentation
 sudo -i -u postgres createdb localcooking_tmp
 
 mkdir -p tmp/
