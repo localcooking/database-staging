@@ -1,0 +1,777 @@
+openapi: 3.0.0
+info:
+  version: 0.0.0
+  title: Local Cooking API
+  description: All available REST methods for interacting with Local Cooking
+
+servers:
+  # Added by API Auto Mocking Plugin
+  - description: SwaggerHub API Auto Mocking
+    url: https://virtserver.swaggerhub.com/athanclark/local-cooking/0.0.0
+
+paths:
+  /users:
+    get:
+      security:
+        - cookieAuth: []
+      summary: Returns a list of all users
+      description: When logged in as an admin, you can see a detailed list of all users
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+          required: false
+          description: Whether or not to only return the currently active users
+      responses:
+        '200':
+          description: A JSON array of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '403':
+          description: Your account isn't authorized to view all users
+  /user/{userid}:
+    parameters:
+      - in: path
+        name: userid
+        schema:
+          type: integer
+          format: int64
+        required: true
+        description: User ID of the user attempting to retrieve details about
+    get:
+      security:
+        - cookieAuth: []
+      summary: Returns details about that user
+      description: Returns public details about this user, or private details if authorized
+      responses:
+        '200':
+          description: A JSON object of the user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: This account is private, and you're not authenticated
+        '403':
+          description: This account is private, and you're not authorized
+    post:
+      security:
+        - cookieAuth: []
+      summary: Functions for manipulating an existing user
+      description: Various functions for manipulating a user
+      requestBody:
+        description: The operations available
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: string
+                  enum: [activate]
+                - type: string
+                  enum: [deactivate]
+      responses:
+        '200':
+          description: The operation succeeded
+        '400':
+          description: The operation wasn't understood
+        '401':
+          description: You aren't authenticated
+        '403':
+          description: Your account isn't authorized for this operation
+          
+  /sessions:
+    get:
+      security:
+        - cookieAuth: []
+      summary: All session tokens and their users & expirations
+      description: An authenticated view for all active sessions
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+          required: false
+          description: Whether or not to only return the currently active users
+      responses:
+        '200':
+          description: A JSON array of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      format: int64
+                    session_token:
+                      type: string
+                      format: uuid
+                    expiration:
+                      type: string
+                      format: date-time
+                  required: [id, session_token, expiration]
+                # FIXME pagination?
+        '401':
+          description: You haven't been authenticated
+        '403':
+          description: You're not authorized to view all sessions
+  /login:
+    post:
+      summary: Attempt a login with credentials
+      description: Login with credentials, then assign a session token to a cookie
+      requestBody:
+        description: Login credentials
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+              required: [email, password]
+                # FIXME returns UUID? How do I set this in a cookie?
+      responses:
+        '200':
+          description: The login was successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: LC-Session-Token=3fa85f64-5717-4562-b3fc-2c963f66afa6; Path=/; HttpOnly
+        '400':
+          description: The login failed
+  /logout:
+    get:
+      security:
+        - cookieAuth: []
+      summary: Attempt a logout
+      description: If already logged-in, void the session token and delete the cookie
+      responses:
+        '200':
+          description: Successfully logged out
+        '401':
+          description: No credentials, or session token not found
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: LC-Session-Token
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+          format: email
+        created_on:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+        last_active:
+          type: string
+          format: date-time
+        deactivated_on:
+          type: string
+          format: date-time
+      required: [id, email, created_on, last_login, last_active, deactivated_on]openapi: 3.0.0
+info:
+  version: 0.0.0
+  title: Local Cooking API
+  description: All available REST methods for interacting with Local Cooking
+
+servers:
+  # Added by API Auto Mocking Plugin
+  - description: SwaggerHub API Auto Mocking
+    url: https://virtserver.swaggerhub.com/athanclark/local-cooking/0.0.0
+
+paths:
+  /users:
+    get:
+      security:
+        - cookieAuth: []
+      summary: Returns a list of all users
+      description: When logged in as an admin, you can see a detailed list of all users
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+          required: false
+          description: Whether or not to only return the currently active users
+      responses:
+        '200':
+          description: A JSON array of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '403':
+          description: Your account isn't authorized to view all users
+  /user/{userid}:
+    parameters:
+      - in: path
+        name: userid
+        schema:
+          type: integer
+          format: int64
+        required: true
+        description: User ID of the user attempting to retrieve details about
+    get:
+      security:
+        - cookieAuth: []
+      summary: Returns details about that user
+      description: Returns public details about this user, or private details if authorized
+      responses:
+        '200':
+          description: A JSON object of the user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: This account is private, and you're not authenticated
+        '403':
+          description: This account is private, and you're not authorized
+    post:
+      security:
+        - cookieAuth: []
+      summary: Functions for manipulating an existing user
+      description: Various functions for manipulating a user
+      requestBody:
+        description: The operations available
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: string
+                  enum: [activate]
+                - type: string
+                  enum: [deactivate]
+      responses:
+        '200':
+          description: The operation succeeded
+        '400':
+          description: The operation wasn't understood
+        '401':
+          description: You aren't authenticated
+        '403':
+          description: Your account isn't authorized for this operation
+          
+  /sessions:
+    get:
+      security:
+        - cookieAuth: []
+      summary: All session tokens and their users & expirations
+      description: An authenticated view for all active sessions
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+          required: false
+          description: Whether or not to only return the currently active users
+      responses:
+        '200':
+          description: A JSON array of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      format: int64
+                    session_token:
+                      type: string
+                      format: uuid
+                    expiration:
+                      type: string
+                      format: date-time
+                  required: [id, session_token, expiration]
+                # FIXME pagination?
+        '401':
+          description: You haven't been authenticated
+        '403':
+          description: You're not authorized to view all sessions
+  /login:
+    post:
+      summary: Attempt a login with credentials
+      description: Login with credentials, then assign a session token to a cookie
+      requestBody:
+        description: Login credentials
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+              required: [email, password]
+                # FIXME returns UUID? How do I set this in a cookie?
+      responses:
+        '200':
+          description: The login was successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: LC-Session-Token=3fa85f64-5717-4562-b3fc-2c963f66afa6; Path=/; HttpOnly
+        '400':
+          description: The login failed
+  /logout:
+    get:
+      security:
+        - cookieAuth: []
+      summary: Attempt a logout
+      description: If already logged-in, void the session token and delete the cookie
+      responses:
+        '200':
+          description: Successfully logged out
+        '401':
+          description: No credentials, or session token not found
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: LC-Session-Token
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+          format: email
+        created_on:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+        last_active:
+          type: string
+          format: date-time
+        deactivated_on:
+          type: string
+          format: date-time
+      required: [id, email, created_on, last_login, last_active, deactivated_on]openapi: 3.0.0
+info:
+  version: 0.0.0
+  title: Local Cooking API
+  description: All available REST methods for interacting with Local Cooking
+
+servers:
+  # Added by API Auto Mocking Plugin
+  - description: SwaggerHub API Auto Mocking
+    url: https://virtserver.swaggerhub.com/athanclark/local-cooking/0.0.0
+
+paths:
+  /users:
+    get:
+      security:
+        - cookieAuth: []
+      summary: Returns a list of all users
+      description: When logged in as an admin, you can see a detailed list of all users
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+          required: false
+          description: Whether or not to only return the currently active users
+      responses:
+        '200':
+          description: A JSON array of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '403':
+          description: Your account isn't authorized to view all users
+  /user/{userid}:
+    parameters:
+      - in: path
+        name: userid
+        schema:
+          type: integer
+          format: int64
+        required: true
+        description: User ID of the user attempting to retrieve details about
+    get:
+      security:
+        - cookieAuth: []
+      summary: Returns details about that user
+      description: Returns public details about this user, or private details if authorized
+      responses:
+        '200':
+          description: A JSON object of the user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: This account is private, and you're not authenticated
+        '403':
+          description: This account is private, and you're not authorized
+    post:
+      security:
+        - cookieAuth: []
+      summary: Functions for manipulating an existing user
+      description: Various functions for manipulating a user
+      requestBody:
+        description: The operations available
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: string
+                  enum: [activate]
+                - type: string
+                  enum: [deactivate]
+      responses:
+        '200':
+          description: The operation succeeded
+        '400':
+          description: The operation wasn't understood
+        '401':
+          description: You aren't authenticated
+        '403':
+          description: Your account isn't authorized for this operation
+          
+  /sessions:
+    get:
+      security:
+        - cookieAuth: []
+      summary: All session tokens and their users & expirations
+      description: An authenticated view for all active sessions
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+          required: false
+          description: Whether or not to only return the currently active users
+      responses:
+        '200':
+          description: A JSON array of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      format: int64
+                    session_token:
+                      type: string
+                      format: uuid
+                    expiration:
+                      type: string
+                      format: date-time
+                  required: [id, session_token, expiration]
+                # FIXME pagination?
+        '401':
+          description: You haven't been authenticated
+        '403':
+          description: You're not authorized to view all sessions
+  /login:
+    post:
+      summary: Attempt a login with credentials
+      description: Login with credentials, then assign a session token to a cookie
+      requestBody:
+        description: Login credentials
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+              required: [email, password]
+                # FIXME returns UUID? How do I set this in a cookie?
+      responses:
+        '200':
+          description: The login was successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: LC-Session-Token=3fa85f64-5717-4562-b3fc-2c963f66afa6; Path=/; HttpOnly
+        '400':
+          description: The login failed
+  /logout:
+    get:
+      security:
+        - cookieAuth: []
+      summary: Attempt a logout
+      description: If already logged-in, void the session token and delete the cookie
+      responses:
+        '200':
+          description: Successfully logged out
+        '401':
+          description: No credentials, or session token not found
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: LC-Session-Token
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+          format: email
+        created_on:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+        last_active:
+          type: string
+          format: date-time
+        deactivated_on:
+          type: string
+          format: date-time
+      required: [id, email, created_on, last_login, last_active, deactivated_on]openapi: 3.0.0
+info:
+  version: 0.0.0
+  title: Local Cooking API
+  description: All available REST methods for interacting with Local Cooking
+
+servers:
+  # Added by API Auto Mocking Plugin
+  - description: SwaggerHub API Auto Mocking
+    url: https://virtserver.swaggerhub.com/athanclark/local-cooking/0.0.0
+
+paths:
+  /users:
+    get:
+      security:
+        - cookieAuth: []
+      summary: Returns a list of all users
+      description: When logged in as an admin, you can see a detailed list of all users
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+          required: false
+          description: Whether or not to only return the currently active users
+      responses:
+        '200':
+          description: A JSON array of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '403':
+          description: Your account isn't authorized to view all users
+  /user/{userid}:
+    parameters:
+      - in: path
+        name: userid
+        schema:
+          type: integer
+          format: int64
+        required: true
+        description: User ID of the user attempting to retrieve details about
+    get:
+      security:
+        - cookieAuth: []
+      summary: Returns details about that user
+      description: Returns public details about this user, or private details if authorized
+      responses:
+        '200':
+          description: A JSON object of the user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: This account is private, and you're not authenticated
+        '403':
+          description: This account is private, and you're not authorized
+    post:
+      security:
+        - cookieAuth: []
+      summary: Functions for manipulating an existing user
+      description: Various functions for manipulating a user
+      requestBody:
+        description: The operations available
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: string
+                  enum: [activate]
+                - type: string
+                  enum: [deactivate]
+      responses:
+        '200':
+          description: The operation succeeded
+        '400':
+          description: The operation wasn't understood
+        '401':
+          description: You aren't authenticated
+        '403':
+          description: Your account isn't authorized for this operation
+          
+  /sessions:
+    get:
+      security:
+        - cookieAuth: []
+      summary: All session tokens and their users & expirations
+      description: An authenticated view for all active sessions
+      parameters:
+        - in: query
+          name: active
+          schema:
+            type: boolean
+          required: false
+          description: Whether or not to only return the currently active users
+      responses:
+        '200':
+          description: A JSON array of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      format: int64
+                    session_token:
+                      type: string
+                      format: uuid
+                    expiration:
+                      type: string
+                      format: date-time
+                  required: [id, session_token, expiration]
+                # FIXME pagination?
+        '401':
+          description: You haven't been authenticated
+        '403':
+          description: You're not authorized to view all sessions
+  /login:
+    post:
+      summary: Attempt a login with credentials
+      description: Login with credentials, then assign a session token to a cookie
+      requestBody:
+        description: Login credentials
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+              required: [email, password]
+                # FIXME returns UUID? How do I set this in a cookie?
+      responses:
+        '200':
+          description: The login was successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: LC-Session-Token=3fa85f64-5717-4562-b3fc-2c963f66afa6; Path=/; HttpOnly
+        '400':
+          description: The login failed
+  /logout:
+    get:
+      security:
+        - cookieAuth: []
+      summary: Attempt a logout
+      description: If already logged-in, void the session token and delete the cookie
+      responses:
+        '200':
+          description: Successfully logged out
+        '401':
+          description: No credentials, or session token not found
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: LC-Session-Token
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+          format: email
+        created_on:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+        last_active:
+          type: string
+          format: date-time
+        deactivated_on:
+          type: string
+          format: date-time
+      required: [id, email, created_on, last_login, last_active, deactivated_on]

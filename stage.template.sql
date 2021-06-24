@@ -1,6 +1,7 @@
 --{{ users pendingRegistrations activePendingRegistrations sessions activeSessions chefs credentials chefCredentials menus items itemRevisions latestActiveItemRevisions menuItemMapping carts orders orderContents reviews }}
 
-CREATE EXTENSION pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 /*
 
@@ -26,6 +27,7 @@ comment on column users.password is 'Argon2 hashed output';
 comment on column users.salt is 'Unique salt per-user';
 comment on column users.deactivated_on is 'Allows a user to pseudo-delete their account without our record-books being corrupted';
 
+-- Deactivate the currently logged-in user identified by their session_token
 CREATE OR REPLACE FUNCTION session_deactivate_user(session_token_ uuid) RETURNS timestamptz AS
 $$
 DECLARE
@@ -41,6 +43,7 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+-- Administratively deactivate a user identified by their user_id
 CREATE OR REPLACE FUNCTION admin_deactivate_user(user_id_ INT) RETURNS timestamptz AS
 $$
 DECLARE
@@ -57,6 +60,7 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+-- Administratively activate a user by their user_id
 CREATE OR REPLACE FUNCTION admin_activate_user(user_id_ INT) RETURNS INT AS
 $$
   UPDATE users SET deactivated_on = NULL
@@ -67,6 +71,7 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+-- Filtered user list which only includes active users.
 CREATE VIEW active_users AS
   SELECT * FROM users WHERE deactivated_on IS NULL;
 
@@ -187,6 +192,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 comment on table sessions is 'Any active logged-in users, with their session token and expiration';
 
+-- SELECT create_hypertable('sessions', 'expiration'); -- FIXME
+
+
 -- TODO call from a cron job
 CREATE OR REPLACE FUNCTION expire_sessions() RETURNS void AS
 $$
@@ -276,6 +284,9 @@ $$
   LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;
+
+
+-- TODO access log?
 
 CREATE TYPE subscription_type AS ENUM ('free', 'premium', 'gold', 'platinum');
 

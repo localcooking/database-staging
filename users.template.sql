@@ -17,11 +17,14 @@ CREATE TABLE IF NOT EXISTS users (
   /* TODO shipping & billing */
 );
 
+-- FIXME use a log of activity & logins
+
 comment on table users is 'All users that can log-in';
 comment on column users.password is 'Argon2 hashed output';
 comment on column users.salt is 'Unique salt per-user';
 comment on column users.deactivated_on is 'Allows a user to pseudo-delete their account without our record-books being corrupted';
 
+-- Deactivate the currently logged-in user identified by their session_token
 CREATE OR REPLACE FUNCTION session_deactivate_user(session_token_ uuid) RETURNS timestamptz AS
 $$
 DECLARE
@@ -37,6 +40,7 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+-- Administratively deactivate a user identified by their user_id
 CREATE OR REPLACE FUNCTION admin_deactivate_user(user_id_ INT) RETURNS timestamptz AS
 $$
 DECLARE
@@ -53,6 +57,7 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+-- Administratively activate a user by their user_id
 CREATE OR REPLACE FUNCTION admin_activate_user(user_id_ INT) RETURNS INT AS
 $$
   UPDATE users SET deactivated_on = NULL
@@ -63,5 +68,6 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+-- Filtered user list which only includes active users.
 CREATE VIEW active_users AS
   SELECT * FROM users WHERE deactivated_on IS NULL;

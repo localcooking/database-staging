@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 comment on table sessions is 'Any active logged-in users, with their session token and expiration';
 
+-- SELECT create_hypertable('sessions', 'expiration'); -- FIXME
+
+
 -- TODO call from a cron job
 CREATE OR REPLACE FUNCTION expire_sessions() RETURNS void AS
 $$
@@ -105,3 +108,6 @@ $$
   LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;
+
+
+-- TODO access log?
