@@ -5,6 +5,13 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE SCHEMA api;
 
+-- CREATE ROLE anon nologin;
+
+GRANT USAGE ON SCHEMA api TO anon;
+
+-- CREATE ROLE authenticator noinherit LOGIN PASSWORD 'foobar';
+-- GRANT anon TO authenticator;
+
 /*
 
 --{{ users }}
@@ -24,6 +31,7 @@ CREATE TABLE IF NOT EXISTS api.users (
   /* TODO shipping & billing */
 );
 
+GRANT SELECT ON api.users TO anon;
 -- FIXME use a log of activity & logins
 
 comment on table  api.users is 'All users that can log-in';

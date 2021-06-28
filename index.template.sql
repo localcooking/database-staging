@@ -6,6 +6,13 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE SCHEMA api;
 
+-- CREATE ROLE anon nologin;
+
+GRANT USAGE ON SCHEMA api TO anon;
+
+-- CREATE ROLE authenticator noinherit LOGIN PASSWORD 'foobar';
+-- GRANT anon TO authenticator;
+
 --[[ users ]]
 
 --[[ pendingRegistrations ]]
