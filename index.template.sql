@@ -4,6 +4,8 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- CREATE EXTENSION IF NOT EXISTS timescaledb;
 
+CREATE SCHEMA api;
+
 --[[ users ]]
 
 --[[ pendingRegistrations ]]
