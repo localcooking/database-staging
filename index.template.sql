@@ -9,6 +9,9 @@ CREATE SCHEMA api;
 -- CREATE ROLE anon nologin;
 
 GRANT USAGE ON SCHEMA api TO anon;
+GRANT USAGE ON SCHEMA api TO customer;
+GRANT USAGE ON SCHEMA api TO chef;
+GRANT USAGE ON SCHEMA api TO moderator;
 
 -- CREATE ROLE authenticator noinherit LOGIN PASSWORD 'foobar';
 -- GRANT anon TO authenticator;

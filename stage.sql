@@ -7,6 +7,9 @@ CREATE SCHEMA api;
 -- CREATE ROLE anon nologin;
 
 GRANT USAGE ON SCHEMA api TO anon;
+GRANT USAGE ON SCHEMA api TO customer;
+GRANT USAGE ON SCHEMA api TO chef;
+GRANT USAGE ON SCHEMA api TO moderator;
 
 -- CREATE ROLE authenticator noinherit LOGIN PASSWORD 'foobar';
 -- GRANT anon TO authenticator;
@@ -54,7 +57,9 @@ CREATE TABLE IF NOT EXISTS api.users (
   /* TODO shipping & billing */
 );
 
-GRANT SELECT ON api.users TO anon;
+-- GRANT SELECT ON api.users TO anon;
+GRANT ALL ON api.users TO moderator;
+-- GRANT USAGE, SELECT ON SEQUENCE api.users.user_id TO 
 -- FIXME use a log of activity & logins
 
 comment on table  api.users is 'All users that can log-in';
@@ -109,6 +114,8 @@ $$
 -- Filtered user list which only includes active users.
 CREATE VIEW api.active_users AS
   SELECT * FROM api.users WHERE deactivated_on IS NULL;
+
+GRANT ALL ON api.active_users TO moderator;
 
 /*
 Here, during registration, we email the address a link with a unique token,
