@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS api.items (
 );
 /* TODO constraints - 5 for free, 15 for premium, 30 for gold, inf for platinum */
 
+GRANT SELECT ON api.items TO anon;
+
 /*
 Allows for revisions to be saved over time, that way an order refers to a specific edition of an item,
 and not one that was edited after being ordered.
@@ -33,6 +35,8 @@ CREATE TABLE IF NOT EXISTS api.item_revisions (
   /* FIXME categories like vegan etc. */
 );
 -- FIXME max number of revisions? Revision spamming?
+
+GRANT SELECT ON api.item_revisions TO moderator;
 
 /*
 A simple sub-table where each item has it's latest revision information
@@ -63,6 +67,8 @@ CREATE VIEW api.latest_active_item_revisions AS
                 ON latest_revision.item_id = items.item_id
     WHERE api.items.deleted_on IS NULL;
 
+GRANT SELECT ON api.latest_active_item_revisions TO anon;
+
 /*
 Many-to-many relationship of the same item going to different menus, and the same menu having different items.
 
@@ -78,6 +84,8 @@ CREATE TABLE IF NOT EXISTS api.menu_item_mapping (
 );
 /* TODO constraints - 5 for free, 15 for premium, 30 for gold, inf for platinum */
 -- Nothing references this table, rows can be added & deleted freely per the chef's desire.
+
+GRANT SELECT ON api.menu_item_mapping TO anon;
 
 -- CREATE TABLE IF NOT EXISTS menu_item_ordering (
 --   menu_id INT UNIQUE NOT NULL REFERENCES menus (menu_id) ON DELETE CASCADE,
@@ -98,3 +106,5 @@ $$
   LANGUAGE SQL
   STABLE
   RETURNS NULL ON NULL INPUT;
+
+GRANT EXECUTE ON FUNCTION api.get_menu_items TO anon;

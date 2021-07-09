@@ -13,6 +13,8 @@ GRANT USAGE ON SCHEMA api TO customer;
 GRANT USAGE ON SCHEMA api TO chef;
 GRANT USAGE ON SCHEMA api TO moderator;
 
+ALTER DEFAULT PRIVILAGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+
 -- CREATE ROLE authenticator noinherit LOGIN PASSWORD 'foobar';
 -- GRANT anon TO authenticator;
 
