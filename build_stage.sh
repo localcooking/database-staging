@@ -2,16 +2,16 @@
 
 # Populate index
 
-ltext "index.template.sql users.template.sql pendingRegistrations.template.sql sessions.template.sql chefs.template.sql menus.template.sql items.template.sql carts.template.sql orders.template.sql reviews.template.sql" \
-      -r "users.template.sql" \
-      -r "pendingRegistrations.template.sql" \
-      -r "sessions.template.sql" \
-      -r "chefs.template.sql" \
-      -r "menus.template.sql" \
-      -r "items.template.sql" \
-      -r "carts.template.sql" \
-      -r "orders.template.sql" \
-      -r "reviews.template.sql" \
+ltext "index.template.sql modules/users.template.sql modules/pendingRegistrations.template.sql modules/sessions.template.sql modules/chefs.template.sql modules/menus.template.sql modules/items.template.sql modules/carts.template.sql modules/orders.template.sql modules/reviews.template.sql" \
+      -r "modules/users.template.sql" \
+      -r "modules/pendingRegistrations.template.sql" \
+      -r "modules/sessions.template.sql" \
+      -r "modules/chefs.template.sql" \
+      -r "modules/menus.template.sql" \
+      -r "modules/items.template.sql" \
+      -r "modules/carts.template.sql" \
+      -r "modules/orders.template.sql" \
+      -r "modules/reviews.template.sql" \
       > stage.template.sql
 
 # Populate documentation

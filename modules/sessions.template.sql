@@ -40,6 +40,8 @@ sessions are legitimate.
 CREATE VIEW api.active_sessions AS
   SELECT * FROM api.sessions WHERE expiration >= CURRENT_TIMESTAMP;
 
+GRANT ALL ON api.active_sessions TO moderator;
+
 CREATE OR REPLACE FUNCTION api.get_login_salt(email_ VARCHAR) RETURNS BYTEA AS
 $$
   SELECT salt FROM api.users WHERE email = email_;
@@ -47,6 +49,8 @@ $$
   LANGUAGE SQL
   STABLE
   RETURNS NULL ON NULL INPUT;
+
+GRANT EXECUTE ON FUNCTION api.get_login_salt TO anon;
 
 -- FIXME raise when session doesn't exist?
 CREATE OR REPLACE FUNCTION api.get_logged_in_user_id(session_token_ uuid) RETURNS INT AS

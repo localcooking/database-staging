@@ -11,6 +11,8 @@ GRANT USAGE ON SCHEMA api TO customer;
 GRANT USAGE ON SCHEMA api TO chef;
 GRANT USAGE ON SCHEMA api TO moderator;
 
+ALTER DEFAULT PRIVILAGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+
 -- CREATE ROLE authenticator noinherit LOGIN PASSWORD 'foobar';
 -- GRANT anon TO authenticator;
 
@@ -83,6 +85,8 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+GRANT EXECUTE ON FUNCTION api.session_deactivate_user TO customer;
+
 -- Administratively deactivate a user identified by their user_id
 CREATE OR REPLACE FUNCTION api.admin_deactivate_user(user_id_ INT) RETURNS timestamptz AS
 $$
@@ -100,6 +104,8 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+GRANT EXECUTE ON FUNCTION api.admin_deactivate_user TO moderator;
+
 -- Administratively activate a user by their user_id
 CREATE OR REPLACE FUNCTION api.admin_activate_user(user_id_ INT) RETURNS INT AS
 $$
@@ -110,6 +116,8 @@ $$
   LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;
+
+GRANT EXECUTE ON FUNCTION api.admin_activate_user TO moderator;
 
 -- Filtered user list which only includes active users.
 CREATE VIEW api.active_users AS
@@ -303,6 +311,8 @@ View definition:
 CREATE VIEW api.active_sessions AS
   SELECT * FROM api.sessions WHERE expiration >= CURRENT_TIMESTAMP;
 
+GRANT ALL ON api.active_sessions TO moderator;
+
 CREATE OR REPLACE FUNCTION api.get_login_salt(email_ VARCHAR) RETURNS BYTEA AS
 $$
   SELECT salt FROM api.users WHERE email = email_;
@@ -310,6 +320,8 @@ $$
   LANGUAGE SQL
   STABLE
   RETURNS NULL ON NULL INPUT;
+
+GRANT EXECUTE ON FUNCTION api.get_login_salt TO anon;
 
 -- FIXME raise when session doesn't exist?
 CREATE OR REPLACE FUNCTION api.get_logged_in_user_id(session_token_ uuid) RETURNS INT AS
@@ -564,6 +576,8 @@ CREATE TABLE IF NOT EXISTS api.menus (
 );
 /* TODO constraints - one menu for free, three for premium, 10 for gold, inf for platinum */
 
+GRANT SELECT ON api.menus TO anon;
+
 
 CREATE OR REPLACE FUNCTION api.create_menu(session_token_ uuid, title_ VARCHAR, description_ VARCHAR) RETURNS INT AS
 $$
@@ -580,6 +594,8 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+GRANT EXECUTE ON FUNCTION api.create_menu TO chef;
+
 
 -- FIXME "system" vs. "admin" verbiage
 CREATE OR REPLACE FUNCTION api.admin_create_menu(chef_id_ INT, title_ VARCHAR, description_ VARCHAR) RETURNS INT AS
@@ -591,6 +607,8 @@ $$
   LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;
+
+GRANT EXECUTE ON FUNCTION api.admin_create_menu TO moderator;
 
 /*
 Menu items are the actual products that users can purchase, which may be showcased in one or more
@@ -624,6 +642,8 @@ CREATE TABLE IF NOT EXISTS api.items (
   rating decimal CHECK (rating >= 1 AND rating <= 5) -- accumulated ratings, to not waste computation
 );
 /* TODO constraints - 5 for free, 15 for premium, 30 for gold, inf for platinum */
+
+GRANT SELECT ON api.items TO anon;
 
 /*
 Allows for revisions to be saved over time, that way an order refers to a specific edition of an item,
@@ -664,6 +684,8 @@ CREATE TABLE IF NOT EXISTS api.item_revisions (
   /* FIXME categories like vegan etc. */
 );
 -- FIXME max number of revisions? Revision spamming?
+
+GRANT SELECT ON api.item_revisions TO moderator;
 
 /*
 A simple sub-table where each item has it's latest revision information
@@ -725,6 +747,8 @@ CREATE VIEW api.latest_active_item_revisions AS
                 ON latest_revision.item_id = items.item_id
     WHERE api.items.deleted_on IS NULL;
 
+GRANT SELECT ON api.latest_active_item_revisions TO anon;
+
 /*
 Many-to-many relationship of the same item going to different menus, and the same menu having different items.
 
@@ -754,6 +778,8 @@ CREATE TABLE IF NOT EXISTS api.menu_item_mapping (
 /* TODO constraints - 5 for free, 15 for premium, 30 for gold, inf for platinum */
 -- Nothing references this table, rows can be added & deleted freely per the chef's desire.
 
+GRANT SELECT ON api.menu_item_mapping TO anon;
+
 -- CREATE TABLE IF NOT EXISTS menu_item_ordering (
 --   menu_id INT UNIQUE NOT NULL REFERENCES menus (menu_id) ON DELETE CASCADE,
 --   menu_item_ids INT[] NOT NULL REFERENCES menu_item_mapping (menu_item_id) ON DELETE PRUNE -- wtf
@@ -773,6 +799,8 @@ $$
   LANGUAGE SQL
   STABLE
   RETURNS NULL ON NULL INPUT;
+
+GRANT EXECUTE ON FUNCTION api.get_menu_items TO anon;
 
 /*
 The cart for people to file orders

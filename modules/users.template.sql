@@ -43,6 +43,8 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+GRANT EXECUTE ON FUNCTION api.session_deactivate_user TO customer;
+
 -- Administratively deactivate a user identified by their user_id
 CREATE OR REPLACE FUNCTION api.admin_deactivate_user(user_id_ INT) RETURNS timestamptz AS
 $$
@@ -60,6 +62,8 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+GRANT EXECUTE ON FUNCTION api.admin_deactivate_user TO moderator;
+
 -- Administratively activate a user by their user_id
 CREATE OR REPLACE FUNCTION api.admin_activate_user(user_id_ INT) RETURNS INT AS
 $$
@@ -70,6 +74,8 @@ $$
   LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;
+
+GRANT EXECUTE ON FUNCTION api.admin_activate_user TO moderator;
 
 -- Filtered user list which only includes active users.
 CREATE VIEW api.active_users AS

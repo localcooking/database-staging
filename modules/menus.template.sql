@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS api.menus (
 );
 /* TODO constraints - one menu for free, three for premium, 10 for gold, inf for platinum */
 
+GRANT SELECT ON api.menus TO anon;
+
 
 CREATE OR REPLACE FUNCTION api.create_menu(session_token_ uuid, title_ VARCHAR, description_ VARCHAR) RETURNS INT AS
 $$
@@ -30,6 +32,8 @@ $$
   VOLATILE
   RETURNS NULL ON NULL INPUT;
 
+GRANT EXECUTE ON FUNCTION api.create_menu TO chef;
+
 
 -- FIXME "system" vs. "admin" verbiage
 CREATE OR REPLACE FUNCTION api.admin_create_menu(chef_id_ INT, title_ VARCHAR, description_ VARCHAR) RETURNS INT AS
@@ -41,3 +45,5 @@ $$
   LANGUAGE SQL
   VOLATILE
   RETURNS NULL ON NULL INPUT;
+
+GRANT EXECUTE ON FUNCTION api.admin_create_menu TO moderator;
