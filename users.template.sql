@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS api.users (
   /* TODO shipping & billing */
 );
 
--- GRANT SELECT ON api.users TO anon;
+GRANT SELECT (email, password) ON api.users TO anon;
 GRANT ALL ON api.users TO moderator;
 -- GRANT USAGE, SELECT ON SEQUENCE api.users.user_id TO 
 -- FIXME use a log of activity & logins
