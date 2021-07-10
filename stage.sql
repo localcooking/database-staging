@@ -11,7 +11,7 @@ GRANT USAGE ON SCHEMA api TO customer;
 GRANT USAGE ON SCHEMA api TO chef;
 GRANT USAGE ON SCHEMA api TO moderator;
 
-ALTER DEFAULT PRIVILAGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 
 -- CREATE ROLE authenticator noinherit LOGIN PASSWORD 'foobar';
 -- GRANT anon TO authenticator;
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS api.users (
   /* TODO shipping & billing */
 );
 
--- GRANT SELECT ON api.users TO anon;
+GRANT SELECT (email, password) ON api.users TO anon;
 GRANT ALL ON api.users TO moderator;
 -- GRANT USAGE, SELECT ON SEQUENCE api.users.user_id TO 
 -- FIXME use a log of activity & logins
