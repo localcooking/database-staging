@@ -1,0 +1,11 @@
+[Unit]
+Description=REST server for the Local Cooking PostgreSQL database, using PostgREST
+AssertPathExists=/opt/database-staging
+
+[Service]
+Type=notify
+ExecStart=/root/.local/postgrest /opt/database-staging/db-api.conf
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
