@@ -4,7 +4,7 @@ AssertPathExists=/opt/database-staging
 
 [Service]
 Type=notify
-ExecStart=/root/.local/postgrest /opt/database-staging/db-api.conf
+ExecStart=/root/.local/bin/postgrest /opt/database-staging/db-api.conf
 Nice=5
 
 [Install]
